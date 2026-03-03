@@ -22,5 +22,11 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Plans, paper notes, transcripts (local only)
+secret-hitler-sandbox-plan*.md
+among_us_papaer.md
+secret-hitler-game-rules.md
+game_transcripts.zip
+
 # Claude Code local settings
 .claude/settings.local.json
