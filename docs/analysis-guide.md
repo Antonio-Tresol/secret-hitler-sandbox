@@ -416,6 +416,147 @@ for fascists deliberately tanking votes to force chaos when the deck
 is fascist-heavy.
 
 
+Generating a full game report (agent teams)
+--------------------------------------------
+
+Manual log reading is fine for quick checks, but a full game report
+benefits from parallel analysis with cross-validation. The process
+below uses Claude Code agent teams to produce a comprehensive,
+evidence-backed report.
+
+### Phase 1: Parallel analysis agents
+
+Spawn three specialized agents, each working independently on the same
+game logs:
+
+**Timeline agent** -- reads `events.jsonl` and builds a ground-truth
+round-by-round timeline. Every claim is sourced to a specific event
+line. Output includes: role assignments, vote tallies, policy draws
+and discards (president drew X, discarded index Y), executive powers
+triggered, election tracker state, and the final result.
+
+**Fascist strategy analyst** -- reads the transcripts of all fascist
+players (`player_N_transcript.jsonl` for each fascist and Hitler).
+Extracts verbatim quotes from `thinking` blocks (private reasoning)
+and `text` blocks (public statements). Identifies deceptive moments
+by comparing the two. Every claim pins the source:
+
+    Source: player_4_transcript.jsonl, assistant block, thinking:
+    "As a Fascist, I should discard the Liberal (index 0) and give
+    Chancellor Player 5 two Fascist cards."
+
+**Liberal perspective analyst** -- reads transcripts of all liberal
+players. Tracks suspicion evolution across rounds: who each liberal
+suspected and why, how suspicions shifted after each event. Pins
+verbatim quotes from thinking blocks with round attribution:
+
+    Source: player_0_transcript.jsonl, R9 thinking block:
+    "P5 has been Chancellor in two Fascist governments and consistently
+    voted against Liberal policies, making them almost certainly part
+    of the Fascist team."
+
+Each agent produces a structured analysis document with every factual
+claim tagged by its source file, event line, or transcript block.
+
+**Evidence rules:** All evidence must be verbatim quotes or direct
+action references from the raw logs. Never paraphrase. If a thinking
+block is too long, use `[...]` to elide irrelevant sections but keep
+the quoted portions word-for-word. Analysts may provide complementary
+commentary or interpretation, but this must be clearly separated from
+the primary evidence. Evidence is primary source, analysis is
+secondary.
+
+### Phase 2: Cross-validation agents
+
+After Phase 1, spawn two validator agents. Each validator reads the
+raw logs AND one of the Phase 1 analysis documents:
+
+**Fascist analysis validator** -- takes the fascist strategy analysis
+and checks every claim against `events.jsonl` and the relevant player
+transcripts. For each claim, the validator reports:
+
+- VERIFIED: claim matches the raw data exactly
+- NOT VERBATIM: quote does not match the raw transcript word-for-word
+  (validator provides the actual text so the author can fix it)
+- FALSIFIED: claim contradicts the raw data (validator provides the
+  correct information)
+
+**Liberal analysis validator** -- same process for the liberal
+perspective analysis.
+
+Validators produce a claim-by-claim audit. Example output:
+
+    Claim: "P4 drew [L, F, F] and discarded the Liberal"
+    Source check: events.jsonl, action line for R5 president_discard
+      -> drawn_policies from observation: ["liberal","fascist","fascist"]
+      -> discard_index: 0
+    Verdict: VERIFIED
+
+    Claim: P6 thinking R2: "I should vote Nein..."
+    Source check: player_6_transcript.jsonl, R2 assistant block
+      -> Actual text: "Actually, I should vote **Nein (false)** to NOT..."
+    Verdict: NOT VERBATIM (must be replaced with exact transcript text)
+
+### Phase 3: Report synthesis
+
+After validation, synthesize the final report:
+
+1. Start from the timeline agent's ground-truth timeline as the
+   structural backbone.
+2. Weave in the fascist and liberal analyses, keeping only claims
+   that passed validation.
+3. Replace any quotes flagged as NOT VERBATIM with the exact text
+   from the validator's correction.
+4. Correct any falsified claims using the validator's corrected data.
+5. Add cross-references between sections (e.g., "the liberal-analyst
+   confirmed P2 was the only liberal who correctly identified P4 as
+   the R5 saboteur").
+
+The final report lives in `docs/game-<game_id>-report.md`.
+
+### Evidence format
+
+All quotes in game reports must be verbatim. Use this format:
+
+    > [P1 thinking R2]: "exact verbatim quote from thinking block"
+
+If the thinking block is long, use `[...]` to elide irrelevant
+sections while keeping quoted portions word-for-word:
+
+    > [P6 thinking R6]: "President 4 → Chancellor 5 passed Fascist
+    > policy with Investigate power [...] Player 5 likely IS a Fascist
+    > (or very closely aligned)"
+
+Never paraphrase or synthesize quotes. If a claim requires combining
+information from multiple blocks, quote each block separately and
+provide analysis as a separate, clearly labeled comment.
+
+Source attribution always includes: player ID, block type (thinking
+or text), and round number. This lets any reader trace the claim back
+to the raw transcript for verification.
+
+For action-based evidence (votes, policy draws, executions), reference
+the event type and round directly from `events.jsonl`:
+
+    Action evidence: events.jsonl R5 president_discard, P4 drew
+    [L, F, F], discarded index 0 (Liberal).
+
+### Running it
+
+Using Claude Code agent teams:
+
+    1. Create a team with TaskCreate for each phase
+    2. Spawn analysis agents in parallel (Phase 1)
+    3. Wait for all three to complete
+    4. Spawn validator agents in parallel (Phase 2)
+    5. Wait for validators to complete
+    6. Synthesize the report (Phase 3), applying corrections
+
+A full analysis of a 7-player, 10-round game takes roughly 10-15
+minutes of agent time and produces a report with 50-100 pinned
+evidence citations.
+
+
 Configs directory
 -----------------
 
