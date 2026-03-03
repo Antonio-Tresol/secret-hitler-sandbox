@@ -1,14 +1,13 @@
 secret-hitler-sandbox
 =====================
 
-A research sandbox for studying deceptive alignment in multi-agent LLM
+A research sandbox for studying deceptive capabilities in LLM based multi-agent
 systems using the social deduction game Secret Hitler. LLM agents play
 the full game against each other through tool use (MCP), while a
 deterministic game engine enforces rules and records everything for
 later analysis.
 
-Inspired by the "Among Us" multi-agent deception paper
-(github.com/7vik/AmongUs).
+Inspired by the "Among Us" multi-agent deception paper, [code](github.com/7vik/AmongUs) and [paper](https://arxiv.org/pdf/2504.04072)
 
 
 What this is
