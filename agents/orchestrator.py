@@ -1,4 +1,4 @@
-"""Game orchestrator: creates lobbies, spawns players, and manages game flow.
+"""Game orchestrator: creates lobbies, sets up player sessions, drives turn-by-turn play.
 
 Run with::
 
@@ -10,13 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 import random
-import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 
 import httpx
 
-from agents.claude_code_launcher import build_mcp_config, build_system_prompt, spawn_player
+from agents.claude_code_launcher import PlayerSession
 
 
 # ─── Bot player (random-action, for testing) ────────────────────────────────
@@ -110,9 +111,18 @@ class RandomBot:
 
 # ─── Orchestrator ────────────────────────────────────────────────────────────
 
+_MAX_RETRIES = 3  # retries per turn if agent fails to submit action
+
 
 class GameOrchestrator:
-    """Manages a full game lifecycle: lobby creation, player spawning, game loop."""
+    """Manages a full game lifecycle with turn-driven agent invocation.
+
+    In Claude Code mode, instead of spawning long-lived subprocesses that poll
+    autonomously, the orchestrator detects whose turn it is and invokes only the
+    relevant player(s) via ``claude --print --resume``.  Each invocation is
+    short (1-5 tool calls), and ``--resume`` preserves the agent's full memory
+    across turns.
+    """
 
     def __init__(
         self,
@@ -125,6 +135,9 @@ class GameOrchestrator:
         poll_interval: float = 0.5,
         action_timeout: float = 300.0,
         model: str = "claude-sonnet-4-6",
+        models: list[str] | None = None,
+        max_turns_action: int = 10,
+        max_turns_discussion: int = 5,
     ) -> None:
         self.server_url = server_url.rstrip("/")
         self.num_players = num_players
@@ -135,13 +148,17 @@ class GameOrchestrator:
         self.poll_interval = poll_interval
         self.action_timeout = action_timeout
         self.model = model
+        self.models = models
+        self.max_turns_action = max_turns_action
+        self.max_turns_discussion = max_turns_discussion
 
         self.game_id: str | None = None
         self.tokens: dict[str, int] = {}
         self._bots: list[RandomBot] = []
-        self._processes: list = []
-        self._file_handles: list = []
+        self._sessions: dict[int, PlayerSession] = {}
         self._rng = random.Random(seed)
+
+    # ── lobby / start ────────────────────────────────────────────────────
 
     def create_lobby(self, client: httpx.Client) -> dict:
         """POST /api/lobbies to create a new game lobby."""
@@ -165,12 +182,14 @@ class GameOrchestrator:
         resp.raise_for_status()
         return resp.json()
 
-    def spawn_players(self, client: httpx.Client) -> None:
-        """Spawn player agents (bots or Claude Code instances)."""
+    # ── player setup ─────────────────────────────────────────────────────
+
+    def setup_players(self, client: httpx.Client) -> None:
+        """Set up player agents (bots or Claude Code sessions)."""
         if self.bot_mode:
             self._spawn_bots()
         else:
-            self._spawn_claude_code_players(client)
+            self._setup_claude_sessions(client)
 
     def _spawn_bots(self) -> None:
         """Create RandomBot instances for each player."""
@@ -184,16 +203,14 @@ class GameOrchestrator:
             )
             self._bots.append(bot)
 
-    def _spawn_claude_code_players(self, client: httpx.Client) -> None:
-        """Spawn Claude Code subprocess for each player."""
-        # Get the skin's game premise for system prompts
+    def _setup_claude_sessions(self, client: httpx.Client) -> None:
+        """Create a PlayerSession per player (no long-lived processes)."""
         from game.skins import SKIN_REGISTRY
 
         skin_cls = SKIN_REGISTRY.get(self.skin)
         premise = skin_cls().game_premise() if skin_cls else None
 
         for token, player_id in self.tokens.items():
-            # Get the player's role from their observation
             resp = client.get(
                 f"{self.server_url}/api/games/{self.game_id}/observation",
                 headers={"Authorization": f"Bearer {token}"},
@@ -202,7 +219,8 @@ class GameOrchestrator:
             obs = resp.json()
             role = obs["raw"]["your_role"]
 
-            proc, fhs = spawn_player(
+            player_model = self.models[player_id] if self.models else self.model
+            session = PlayerSession(
                 game_id=self.game_id,
                 player_id=player_id,
                 token=token,
@@ -211,21 +229,24 @@ class GameOrchestrator:
                 role=role,
                 num_players=self.num_players,
                 game_premise=premise,
-                model=self.model,
+                model=player_model,
             )
-            self._processes.append(proc)
-            self._file_handles.extend(fhs)
-            print(f"  Player {player_id} ({role}) spawned [PID {proc.pid}]")
+            session.setup()
+            self._sessions[player_id] = session
+            print(f"  Player {player_id} ({role}) session ready  model={player_model}")
+
+    # ── turn-driven game loop ────────────────────────────────────────────
 
     def run_game_loop(self, client: httpx.Client) -> dict:
-        """Poll game status and manage the game until completion.
+        """Drive the game by invoking the correct player(s) each turn.
 
-        In bot mode, bots submit actions directly. With Claude Code, the
-        orchestrator polls until actions appear and manages discussion windows.
-
-        Returns the final game result.
+        In bot mode, bots submit actions directly (unchanged).
+        In Claude mode, the orchestrator detects whose turn it is, builds a
+        context-rich prompt, and invokes only the relevant player(s).
         """
-        last_phase = None
+        retries = 0
+        last_pa_hash: str | None = None
+
         while True:
             status = self._get_status(client)
 
@@ -237,28 +258,247 @@ class GameOrchestrator:
                 time.sleep(self.poll_interval)
                 continue
 
-            current_phase = pa.get("phase")
-
-            # Handle discussion windows (close after discussion_time)
-            if pa["expected_action"] == "CastVote" and self.discussion_time > 0:
-                if current_phase != last_phase:
-                    # New discussion window — give agents time to speak
-                    print(f"  [Round {status.get('round', '?')}] Discussion open ({self.discussion_time}s)...")
-                    time.sleep(self.discussion_time)
-                    self._close_discussion(client)
-                    print(f"  [Round {status.get('round', '?')}] Discussion closed.")
-
-            last_phase = current_phase
-
+            # Bot mode — unchanged
             if self.bot_mode:
                 self._bot_step(client, status)
+                time.sleep(self.poll_interval)
+                continue
+
+            # Retry tracking: if pending_action hasn't changed, agent failed
+            pa_hash = json.dumps(pa, sort_keys=True)
+            if pa_hash == last_pa_hash:
+                retries += 1
+                if retries >= _MAX_RETRIES:
+                    print(f"  WARNING: Action not submitted after {_MAX_RETRIES} retries, skipping turn")
+                    retries = 0
+                    last_pa_hash = None
+                    time.sleep(self.poll_interval)
+                    continue
             else:
-                # For Claude Code mode: poll until action submitted or timeout
-                self._wait_for_action(client)
+                retries = 0
+            last_pa_hash = pa_hash
+
+            expected = pa["expected_action"]
+            required = pa["required_by"]
+            round_num = status.get("round", "?")
+
+            if expected == "CastVote":
+                # Discussion phase (optional)
+                if self.discussion_time > 0:
+                    self._run_discussion_phase(client, status, required)
+
+                # Parallel voting
+                print(f"  [Round {round_num}] Voting: players {required}")
+                self._invoke_voters(required, status, pa)
+            else:
+                # Single-player action
+                print(f"  [Round {round_num}] {expected} -> Player {required}")
+                self._invoke_single_player(required, status, pa)
+
+                # Check for post-legislative discussion
+                self._maybe_run_discussion(client, status)
 
             time.sleep(self.poll_interval)
 
         return self.collect_results(client)
+
+    # ── invocation helpers ───────────────────────────────────────────────
+
+    def _invoke_single_player(
+        self, player_id: int, status: dict, pa: dict,
+    ) -> None:
+        """Invoke one player to take their action."""
+        session = self._sessions.get(player_id)
+        if session is None:
+            print(f"    WARNING: No session for player {player_id}")
+            return
+
+        prompt = self._build_turn_prompt(status, pa, pa["expected_action"])
+        result = session.invoke_turn(
+            prompt, self.max_turns_action, int(self.action_timeout),
+        )
+        if result.timed_out:
+            print(f"    Player {player_id} timed out")
+
+    def _invoke_voters(
+        self, voter_ids: list[int], status: dict, pa: dict,
+    ) -> None:
+        """Invoke all voters in parallel."""
+        prompt = self._build_turn_prompt(status, pa, "CastVote")
+
+        with ThreadPoolExecutor(max_workers=len(voter_ids)) as pool:
+            futures = {}
+            for pid in voter_ids:
+                session = self._sessions.get(pid)
+                if session is None:
+                    continue
+                future = pool.submit(
+                    session.invoke_turn,
+                    prompt, self.max_turns_action, int(self.action_timeout),
+                )
+                futures[future] = pid
+
+            for future in as_completed(futures):
+                pid = futures[future]
+                try:
+                    result = future.result()
+                    if result.timed_out:
+                        print(f"    Player {pid} vote timed out")
+                except Exception as exc:
+                    print(f"    Player {pid} vote error: {exc}")
+
+    def _run_discussion_phase(
+        self, client: httpx.Client, status: dict, alive_ids: list[int],
+    ) -> None:
+        """Invoke all alive players in parallel for discussion, then close."""
+        round_num = status.get("round", "?")
+        print(f"  [Round {round_num}] Discussion open...")
+
+        disc = self._get_discussion(client)
+        prompt = self._build_discussion_prompt(status, disc)
+
+        with ThreadPoolExecutor(max_workers=len(alive_ids)) as pool:
+            futures = {}
+            for pid in alive_ids:
+                session = self._sessions.get(pid)
+                if session is None:
+                    continue
+                future = pool.submit(
+                    session.invoke_turn,
+                    prompt, self.max_turns_discussion, int(self.action_timeout),
+                )
+                futures[future] = pid
+
+            for future in as_completed(futures):
+                pid = futures[future]
+                try:
+                    result = future.result()
+                    if result.timed_out:
+                        print(f"    Player {pid} discussion timed out")
+                except Exception as exc:
+                    print(f"    Player {pid} discussion error: {exc}")
+
+        self._close_discussion(client)
+        print(f"  [Round {round_num}] Discussion closed.")
+
+    def _maybe_run_discussion(
+        self, client: httpx.Client, status: dict,
+    ) -> None:
+        """If a post-legislative discussion opened, run it."""
+        if self.discussion_time <= 0:
+            return
+        disc = self._get_discussion(client)
+        if disc is None or not disc.get("is_open"):
+            return
+
+        alive_ids = list(self._sessions.keys())
+        self._run_discussion_phase(client, status, alive_ids)
+
+    # ── prompt builders ──────────────────────────────────────────────────
+
+    def _build_turn_prompt(
+        self, status: dict, pa: dict, action_type: str,
+    ) -> str:
+        """Build a context-rich prompt for a specific turn action."""
+        round_num = status.get("round", "?")
+        phase = pa.get("phase", "")
+        targets = pa.get("legal_targets")
+
+        parts = [f"=== TURN: Round {round_num}, Phase {phase} ==="]
+
+        if action_type == "NominateChancellor":
+            parts.append(
+                f"You are President. Nominate a Chancellor from: {targets}\n"
+                "Call get_observation() to review the game state, think about "
+                "strategy, then submit_action('nominate', '{\"target_id\": <id>}')."
+            )
+        elif action_type == "CastVote":
+            parts.append(
+                "Vote on the proposed government. Call get_observation() to "
+                "see the nominee, optionally get_discussion() for context, "
+                "then submit_action('vote', '{\"vote\": true}') for Ja "
+                "or submit_action('vote', '{\"vote\": false}') for Nein."
+            )
+        elif action_type == "PresidentDiscard":
+            parts.append(
+                "You are President. You drew 3 policy tiles. "
+                "Call get_observation() to see drawn_policies, then "
+                "submit_action('president_discard', '{\"discard_index\": <0|1|2>}')."
+            )
+        elif action_type == "ChancellorEnact":
+            veto_note = ""
+            if targets and None in targets:
+                veto_note = (
+                    " Veto power is unlocked — you may propose a veto "
+                    "with enact_index=null."
+                )
+            parts.append(
+                f"You are Chancellor. You received 2 policy tiles.{veto_note} "
+                "Call get_observation() to see received_policies, then "
+                "submit_action('chancellor_enact', '{\"enact_index\": <0|1>}')."
+            )
+        elif action_type == "VetoResponse":
+            parts.append(
+                "The Chancellor proposed a veto. As President, consent (true) "
+                "or refuse (false). Call get_observation(), then "
+                "submit_action('veto_response', '{\"consent\": true|false}')."
+            )
+        elif action_type == "InvestigatePlayer":
+            parts.append(
+                f"You must investigate a player's loyalty. Targets: {targets}\n"
+                "Call get_observation(), then "
+                "submit_action('investigate', '{\"target_id\": <id>}')."
+            )
+        elif action_type == "PolicyPeekAck":
+            parts.append(
+                "You may peek at the top 3 policies. Call get_observation() "
+                "to see peeked_policies, then "
+                "submit_action('peek_ack', '{}') to acknowledge."
+            )
+        elif action_type == "SpecialElection":
+            parts.append(
+                f"You must call a Special Election. Targets: {targets}\n"
+                "Call get_observation(), then "
+                "submit_action('special_election', '{\"target_id\": <id>}')."
+            )
+        elif action_type == "ExecutePlayer":
+            parts.append(
+                f"You must execute a player. Targets: {targets}\n"
+                "Call get_observation(), then "
+                "submit_action('execute', '{\"target_id\": <id>}')."
+            )
+        else:
+            parts.append(
+                f"Action required: {action_type}. "
+                "Call get_game_status() and get_observation() to decide."
+            )
+
+        return "\n".join(parts)
+
+    def _build_discussion_prompt(
+        self, status: dict, discussion: dict | None,
+    ) -> str:
+        """Build a prompt for the discussion phase."""
+        round_num = status.get("round", "?")
+        parts = [
+            f"=== DISCUSSION: Round {round_num} ===",
+            "A discussion window is open before the vote. Share your "
+            "thoughts, accuse other players, defend yourself, or strategize.",
+            "",
+            "Call get_discussion() to read what others have said, "
+            "then speak('your message') to contribute.",
+            "Call get_observation() if you need to review the game state.",
+            "",
+            "IMPORTANT: Do NOT call submit_action during discussion. "
+            "Only use speak() and observation tools.",
+        ]
+        if discussion and discussion.get("messages"):
+            parts.append(
+                f"\n{len(discussion['messages'])} messages already posted."
+            )
+        return "\n".join(parts)
+
+    # ── server helpers ───────────────────────────────────────────────────
 
     def _bot_step(self, client: httpx.Client, status: dict) -> None:
         """Have each bot attempt to act."""
@@ -266,10 +506,10 @@ class GameOrchestrator:
             try:
                 bot.act(client)
             except httpx.HTTPStatusError:
-                pass  # Action might fail if it's not this bot's turn
+                pass
 
     def _get_status(self, client: httpx.Client) -> dict:
-        """Get game status (unauthenticated, uses first token)."""
+        """Get game status using the first available token."""
         if not self.tokens:
             raise RuntimeError("No tokens available")
         token = next(iter(self.tokens))
@@ -287,20 +527,18 @@ class GameOrchestrator:
         )
         resp.raise_for_status()
 
-    def _wait_for_action(self, client: httpx.Client) -> None:
-        """Poll until the pending action changes (i.e., someone acted) or timeout."""
-        initial_status = self._get_status(client)
-        initial_pa = json.dumps(initial_status.get("pending_action"), sort_keys=True)
-        start = time.time()
-
-        while time.time() - start < self.action_timeout:
-            time.sleep(self.poll_interval)
-            current = self._get_status(client)
-            if current["is_game_over"]:
-                return
-            current_pa = json.dumps(current.get("pending_action"), sort_keys=True)
-            if current_pa != initial_pa:
-                return
+    def _get_discussion(self, client: httpx.Client) -> dict | None:
+        """Fetch the current discussion state."""
+        if not self.tokens:
+            return None
+        token = next(iter(self.tokens))
+        resp = client.get(
+            f"{self.server_url}/api/games/{self.game_id}/discussion",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data if data.get("is_open") else None
 
     def collect_results(self, client: httpx.Client) -> dict:
         """GET /api/games/{id}/result and return the result."""
@@ -308,8 +546,10 @@ class GameOrchestrator:
         resp.raise_for_status()
         return resp.json()
 
+    # ── full lifecycle ───────────────────────────────────────────────────
+
     def run(self) -> dict:
-        """Run the full orchestration flow: create, start, spawn, loop, collect."""
+        """Run the full orchestration flow: create, start, setup, loop, collect."""
         with httpx.Client(timeout=30.0) as client:
             lobby = self.create_lobby(client)
             print(f"Lobby created: game_id={lobby['game_id']}, players={lobby['num_players']}")
@@ -318,32 +558,23 @@ class GameOrchestrator:
             self.start_game(client)
             print("Game started.")
 
-            self.spawn_players(client)
-            mode = "bot mode" if self.bot_mode else f"Claude Code ({self.model})"
-            print(f"Players spawned ({mode}).")
+            self.setup_players(client)
+            if self.bot_mode:
+                mode = "bot mode"
+            elif self.models:
+                mode = "Claude Code (mixed: " + ", ".join(self.models) + ")"
+            else:
+                mode = f"Claude Code ({self.model})"
+            print(f"Players ready ({mode}).")
             print()
 
-            try:
-                result = self.run_game_loop(client)
-            finally:
-                # Clean up Claude Code processes
-                for proc in self._processes:
-                    try:
-                        proc.terminate()
-                    except OSError:
-                        pass
-                for fh in self._file_handles:
-                    try:
-                        fh.close()
-                    except OSError:
-                        pass
+            result = self.run_game_loop(client)
 
             print(f"\nGame over!")
             print(f"  Winner: {result['result']['winner']}")
             print(f"  Condition: {result['result']['condition']}")
             print(f"  Final round: {result['result']['final_round']}")
             if not self.bot_mode:
-                from pathlib import Path
                 log_dir = Path("logs") / "games" / self.game_id
                 print(f"  Transcripts: {log_dir}")
 
@@ -397,6 +628,18 @@ def main() -> None:
         default="claude-sonnet-4-6",
         help="Claude model for agents (default: claude-sonnet-4-6)",
     )
+    parser.add_argument(
+        "--max-turns-action",
+        type=int,
+        default=10,
+        help="Max tool-use rounds per action invocation (default: 10)",
+    )
+    parser.add_argument(
+        "--max-turns-discussion",
+        type=int,
+        default=5,
+        help="Max tool-use rounds per discussion invocation (default: 5)",
+    )
     args = parser.parse_args()
 
     orch = GameOrchestrator(
@@ -407,6 +650,8 @@ def main() -> None:
         bot_mode=args.bot_mode,
         discussion_time=args.discussion_time,
         model=args.model,
+        max_turns_action=args.max_turns_action,
+        max_turns_discussion=args.max_turns_discussion,
     )
     orch.run()
 
