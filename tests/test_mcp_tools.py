@@ -87,7 +87,7 @@ class TestSubmitAction:
             session,
             president,
             "submit_action",
-            {"action_type": "nominate", "payload": json.dumps({"target_id": targets[0]})},
+            {"action_type": "nominate", "payload": {"target_id": targets[0]}},
         )
         data = _parse_result(result)
         assert data["event"] == "chancellor_nominated"
@@ -101,23 +101,10 @@ class TestSubmitAction:
             session,
             non_president,
             "submit_action",
-            {"action_type": "nominate", "payload": json.dumps({"target_id": 1})},
+            {"action_type": "nominate", "payload": {"target_id": 1}},
         )
         data = _parse_result(result)
         assert "error" in data
-
-    def test_payload_as_dict(self, session: GameSession):
-        """If payload is already a dict (not a string), it should still work."""
-        president = _get_president(session)
-        targets = _get_legal_targets(session)
-        result = _handle_mcp_tool(
-            session,
-            president,
-            "submit_action",
-            {"action_type": "nominate", "payload": {"target_id": targets[0]}},
-        )
-        data = _parse_result(result)
-        assert data["event"] == "chancellor_nominated"
 
 
 # ─── speak ───────────────────────────────────────────────────────────────────

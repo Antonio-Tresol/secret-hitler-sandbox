@@ -241,8 +241,8 @@ def _create_mcp_server(session: GameSession, player_id: int) -> McpServer:
                             "description": "Action type: nominate, vote, president_discard, chancellor_enact, veto_response, investigate, peek_ack, special_election, execute",
                         },
                         "payload": {
-                            "type": "string",
-                            "description": "JSON string with action payload (e.g. {\"target_id\": 2})",
+                            "type": "object",
+                            "description": "Action payload object (e.g. {\"target_id\": 2})",
                         },
                     },
                     "required": ["action_type", "payload"],
@@ -385,8 +385,7 @@ def _handle_submit_action(
     session: GameSession, player_id: int, arguments: dict, cache: DiffCache
 ) -> list[TextContent]:
     action_type = arguments["action_type"]
-    payload_str = arguments.get("payload", "{}")
-    payload = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
+    payload = arguments.get("payload", {})
     try:
         result = session.submit_action(player_id, action_type, payload)
     except (IllegalActionError, GameOverError) as e:

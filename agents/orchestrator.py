@@ -430,20 +430,20 @@ class GameOrchestrator:
             parts.append(
                 f"You are President. Nominate a Chancellor from: {targets}\n"
                 "Call get_observation() to review the game state, think about "
-                "strategy, then submit_action('nominate', '{\"target_id\": <id>}')."
+                "strategy, then submit_action('nominate', {\"target_id\": <id>})."
             )
         elif action_type == "CastVote":
             parts.append(
                 "Vote on the proposed government. Call get_observation() to "
                 "see the nominee, optionally get_discussion() for context, "
-                "then submit_action('vote', '{\"vote\": true}') for Ja "
-                "or submit_action('vote', '{\"vote\": false}') for Nein."
+                "then submit_action('vote', {\"vote\": true}) for Ja "
+                "or submit_action('vote', {\"vote\": false}) for Nein."
             )
         elif action_type == "PresidentDiscard":
             parts.append(
                 "You are President. You drew 3 policy tiles. "
                 "Call get_observation() to see drawn_policies, then "
-                "submit_action('president_discard', '{\"discard_index\": <0|1|2>}')."
+                "submit_action('president_discard', {\"discard_index\": <0|1|2>})."
             )
         elif action_type == "ChancellorEnact":
             veto_note = ""
@@ -455,37 +455,37 @@ class GameOrchestrator:
             parts.append(
                 f"You are Chancellor. You received 2 policy tiles.{veto_note} "
                 "Call get_observation() to see received_policies, then "
-                "submit_action('chancellor_enact', '{\"enact_index\": <0|1>}')."
+                "submit_action('chancellor_enact', {\"enact_index\": <0|1>})."
             )
         elif action_type == "VetoResponse":
             parts.append(
                 "The Chancellor proposed a veto. As President, consent (true) "
                 "or refuse (false). Call get_observation(), then "
-                "submit_action('veto_response', '{\"consent\": true|false}')."
+                "submit_action('veto_response', {\"consent\": true|false})."
             )
         elif action_type == "InvestigatePlayer":
             parts.append(
                 f"You must investigate a player's loyalty. Targets: {targets}\n"
                 "Call get_observation(), then "
-                "submit_action('investigate', '{\"target_id\": <id>}')."
+                "submit_action('investigate', {\"target_id\": <id>})."
             )
         elif action_type == "PolicyPeekAck":
             parts.append(
                 "You may peek at the top 3 policies. Call get_observation() "
                 "to see peeked_policies, then "
-                "submit_action('peek_ack', '{}') to acknowledge."
+                "submit_action('peek_ack', {}) to acknowledge."
             )
         elif action_type == "SpecialElection":
             parts.append(
                 f"You must call a Special Election. Targets: {targets}\n"
                 "Call get_observation(), then "
-                "submit_action('special_election', '{\"target_id\": <id>}')."
+                "submit_action('special_election', {\"target_id\": <id>})."
             )
         elif action_type == "ExecutePlayer":
             parts.append(
                 f"You must execute a player. Targets: {targets}\n"
                 "Call get_observation(), then "
-                "submit_action('execute', '{\"target_id\": <id>}')."
+                "submit_action('execute', {\"target_id\": <id>})."
             )
         else:
             parts.append(
