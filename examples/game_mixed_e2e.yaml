@@ -1,0 +1,14 @@
+# Mixed-backend E2E test: fast models only
+players: 5
+seed: 42
+skin: secret_hitler
+discussion_rounds: 1
+max_turns_action: 10
+max_turns_discussion: 5
+
+models:
+  - claudecode:claude-haiku-4-5-20251001
+  - opencode:github-copilot/gpt-5-mini
+  - claudecode:claude-haiku-4-5-20251001
+  - opencode:github-copilot/gemini-3-flash-preview
+  - claudecode:claude-haiku-4-5-20251001
