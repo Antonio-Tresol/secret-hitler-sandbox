@@ -1,13 +1,15 @@
 secret-hitler-sandbox
 =====================
 
-A research sandbox for studying deceptive capabilities in LLM based multi-agent
-systems using the social deduction game Secret Hitler. LLM agents play
-the full game against each other through tool use (MCP), while a
-deterministic game engine enforces rules and records everything for
-later analysis.
+A research sandbox for studying deceptive capabilities in LLM-based
+multi-agent systems using the social deduction game Secret Hitler. LLM
+agents play the full game against each other through tool use (MCP),
+while a deterministic game engine enforces rules and records everything
+for later analysis.
 
-Inspired by the "Among Us" multi-agent deception paper, [code](github.com/7vik/AmongUs) and [paper](https://arxiv.org/pdf/2504.04072)
+Inspired by the "Among Us" multi-agent deception paper
+([code](https://github.com/7vik/AmongUs),
+[paper](https://arxiv.org/pdf/2504.04072)).
 
 
 What this is
@@ -23,12 +25,13 @@ The project has three layers:
    (streamable-http). Agents connect to the MCP endpoint; humans or
    scripts can use REST.
 
-3. An orchestrator that launches Claude Code instances as players,
-   invokes them turn by turn, and collects transcripts. Each agent gets
-   a system prompt with the game rules and its secret role, plus an MCP
-   config pointing at the server. The orchestrator uses `--resume` to
-   preserve each agent's full conversation history across turns without
-   burning context on idle polling.
+3. An orchestrator that launches CLI agent instances (Claude Code or
+   OpenCode) as players, invokes them turn by turn, and collects
+   transcripts. Each agent gets a system prompt with the game rules and
+   its secret role, plus an MCP config pointing at the server. The
+   orchestrator uses session resumption to preserve each agent's full
+   conversation history across turns without burning context on idle
+   polling.
 
 There are also two narrative "skins" (Secret Hitler and Corporate Board)
 that re-theme the game terminology without changing mechanics. This is
@@ -39,8 +42,12 @@ Requirements
 ------------
 
 - Python >= 3.11
-- uv (https://docs.astral.sh/uv/)
-- Claude Code CLI, installed and authenticated (for running LLM agents)
+- [uv](https://docs.astral.sh/uv/)
+- At least one agent CLI, installed and authenticated:
+  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) for
+    Anthropic models
+  - [OpenCode](https://opencode.ai) for 75+ providers (OpenAI, Google,
+    OpenRouter, GitHub Copilot, etc.)
 
 Install dependencies:
 
@@ -50,11 +57,11 @@ Install dependencies:
 Running the tests
 -----------------
 
-Unit and integration tests (no API calls, no Claude Code needed):
+Unit and integration tests (no API calls, no agent CLI needed):
 
     uv run pytest tests/ -v -k "not e2e"
 
-There are currently 303 tests covering the engine, server, MCP tools,
+There are currently 336 tests covering the engine, server, MCP tools,
 orchestrator, session management, and prompt generation.
 
 The E2E test runs a real game with Claude Code agents and will consume
@@ -63,67 +70,76 @@ API tokens:
     uv run pytest tests/test_e2e_claude.py -v -m e2e
 
 
-Running a game with bots
--------------------------
+Running a game
+--------------
 
-Bot mode uses random-action bots instead of LLM agents. Useful for
-testing the full pipeline without spending tokens.
-
-Start the server:
+Start the server in one terminal:
 
     uv run uvicorn server.app:app --host 127.0.0.1 --port 8000
 
-In another terminal:
+### Bot mode (no tokens)
 
-    uv run python -m agents --bot-mode --players 5 --seed 42
+Random-action bots for testing the full pipeline:
 
-The game will run to completion in a few seconds and print the result.
+    uv run python -m agents.orchestrator --bot-mode --players 5 --seed 42
 
+### Single model
 
-Running a game with Claude Code agents
----------------------------------------
+All players use the same model. Plain model names default to the Claude
+Code backend:
 
-Start the server:
+    uv run python -m agents.orchestrator --players 5 --seed 42 --model claude-sonnet-4-6
 
-    uv run uvicorn server.app:app --host 127.0.0.1 --port 8000
+### Mixed models via config file
 
-In another terminal:
+A YAML config lets you assign a different backend and model to each
+player. The `backend:model` prefix selects the CLI:
 
-    uv run python -m agents --players 5 --seed 42 --model claude-sonnet-4-6
+    # examples/game_mixed_e2e.yaml
+    players: 5
+    seed: 42
+    skin: secret_hitler
+    discussion_rounds: 1
+    models:
+      - claudecode:claude-haiku-4-5-20251001
+      - opencode:github-copilot/gpt-5-mini
+      - claudecode:claude-haiku-4-5-20251001
+      - opencode:github-copilot/gemini-3-flash-preview
+      - claudecode:claude-haiku-4-5-20251001
 
-This spawns 5 Claude Code instances. Each gets invoked only when the
-orchestrator detects it is their turn to act. A typical 5-player game
-takes 10-20 minutes and runs 6-10 rounds.
+Run it with:
 
-You can also pass per-player models from Python:
+    uv run python -m agents.orchestrator --config examples/game_mixed_e2e.yaml
 
-    uv run python -c "
-    from agents.orchestrator import GameOrchestrator
-    orch = GameOrchestrator(
-        num_players=5,
-        seed=42,
-        models=[
-            'claude-opus-4-6',
-            'claude-opus-4-6',
-            'claude-sonnet-4-6',
-            'claude-sonnet-4-6',
-            'claude-haiku-4-5-20251001',
-        ],
-    )
-    result = orch.run()
-    "
+CLI arguments override config file values when both are provided. See
+`examples/game_config.yaml` for a fully commented example.
 
-CLI flags:
+### CLI flags
 
-    --players N             Number of players (5-10, default 5)
-    --seed N                Random seed for reproducibility
-    --skin NAME             "secret_hitler" or "corporate_board"
-    --model MODEL           Default model for all agents
-    --bot-mode              Use random bots instead of Claude Code
-    --discussion-time SECS  Seconds for discussion windows (default 30)
-    --max-turns-action N    Max tool-use rounds per action (default 10)
+    --players N               Number of players (5-10, default 5)
+    --seed N                  Random seed for reproducibility
+    --skin NAME               "secret_hitler" or "corporate_board"
+    --model SPEC              Default model for all players (backend:model)
+    --models SPEC,SPEC,...    Per-player models, comma-separated
+    --config PATH             YAML config file
+    --bot-mode                Use random bots instead of LLM agents
+    --discussion-rounds N     Discussion rounds per window (default 2)
+    --discussion-timeout SECS Timeout per discussion turn (default 60)
+    --max-turns-action N      Max tool-use rounds per action (default 10)
     --max-turns-discussion N  Max tool-use rounds per discussion (default 5)
-    --server-url URL        Game server URL (default http://127.0.0.1:8000)
+    --server-url URL          Game server URL (default http://127.0.0.1:8000)
+
+### Backends
+
+Model specs use a `backend:model` prefix to select the agent CLI:
+
+- `claudecode:claude-sonnet-4-6` -- Claude Code CLI
+- `opencode:openai/gpt-4-turbo` -- OpenCode CLI
+- `opencode:github-copilot/gpt-5-mini` -- OpenCode via GitHub Copilot
+- `opencode:openrouter/meta-llama/llama-4-maverick` -- OpenCode via OpenRouter
+
+Plain model names without a prefix (e.g. `claude-sonnet-4-6`) default
+to `claudecode:` for backward compatibility.
 
 
 Reading the logs
@@ -132,17 +148,23 @@ Reading the logs
 Every game creates a directory under `logs/games/<game_id>/` containing:
 
     metadata.json                  Game setup (players, skin, seed)
-    events.jsonl                   All actions, observations, and the
-                                   final result, one JSON object per line
-    player_N_transcript.jsonl      Raw Claude Code stream-json output
-                                   for each player, all turns appended
-    player_N_output.txt            Stderr from Claude Code invocations
-    configs/player_N_mcp.json      MCP config used for each player
+    status.json                    Live status snapshot (board, round, phase)
+    events.jsonl                   All actions, observations, discussions,
+                                   and the final result (one JSON per line)
+    player_N_transcript.jsonl      Claude Code stream-json output (all turns)
+    player_N_output.txt            OpenCode plain-text stdout (all turns)
+    configs/player_N_mcp.json      MCP config (Claude Code players)
+    configs/player_N_opencode.json OpenCode config (OpenCode players)
     configs/player_N_system_prompt.md  Full system prompt (rules + role)
 
-To get a quick summary of a game:
+Which transcript files have content depends on the backend. Claude Code
+players populate `transcript.jsonl` (structured, includes thinking
+blocks). OpenCode players populate `output.txt` (plain text).
 
-    cat logs/games/<game_id>/events.jsonl | python -c "
+Quick game summary:
+
+    GAME=<game_id>
+    cat logs/games/$GAME/events.jsonl | python -c "
     import json, sys
     for line in sys.stdin:
         e = json.loads(line)
@@ -153,9 +175,9 @@ To get a quick summary of a game:
             print(f'RESULT: {e[\"data\"][\"winner\"]} ({e[\"data\"][\"condition\"]}), round {e[\"data\"][\"final_round\"]}')
     "
 
-The player transcripts contain the agents' reasoning, tool calls, and
-strategy. Look for entries with `"type": "assistant"` to see what the
-agent was thinking when it made each decision.
+See `docs/analysis-guide.md` for detailed log analysis instructions,
+one-liners, and the agent-team analysis process for producing full game
+reports.
 
 
 Project layout
@@ -181,11 +203,19 @@ Project layout
         game_logger.py      JSONL logging
 
     agents/
-        orchestrator.py     Turn-driven game loop, parallel voting
-        claude_code_launcher.py   PlayerSession, MCP config, system prompts
+        orchestrator.py     Turn-driven game loop, parallel invocation
+        backends.py         Backend abstraction (ClaudeCode + OpenCode sessions)
+        claude_code_launcher.py   Backward-compat shim (imports from backends)
         prompts/            Markdown templates (base rules + per-role)
 
-    tests/                  303 unit/integration tests + 1 E2E test
+    examples/
+        game_config.yaml          Single-model config example
+        game_mixed_e2e.yaml       Mixed-backend config example
+
+    docs/
+        analysis-guide.md         Log format reference and analysis process
+
+    tests/                  336 unit/integration tests + 1 E2E test
 
 
 How it works
@@ -207,16 +237,16 @@ and `get_discussion`.
 The orchestrator drives the game turn by turn. It polls `get_game_status`
 to see who must act, builds a context-rich prompt ("You are President,
 nominate a Chancellor from [1, 3, 4]"), and invokes the relevant
-player's Claude Code session with `--resume` to preserve conversation
-history. For voting, all players are invoked in parallel. After each
-invocation the agent process exits, so there are no long-lived
-subprocesses burning context while idle.
+player's agent session with `--resume` to preserve conversation history.
+For voting and discussion, all relevant players are invoked in parallel.
+After each invocation the agent process exits, so there are no
+long-lived subprocesses burning context while idle.
 
-Each agent session uses `--session-id` on its first invocation and
-`--resume` on all subsequent ones. This means the agent remembers
-everything from previous turns (past observations, its own reasoning,
-discussion messages, who it suspects) without needing to re-read
-the full game history each time.
+Each agent session uses a session ID on its first invocation and resumes
+on all subsequent ones. This means the agent remembers everything from
+previous turns (past observations, its own reasoning, discussion
+messages, who it suspects) without needing to re-read the full game
+history each time.
 
 
 Skins

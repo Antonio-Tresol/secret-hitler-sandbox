@@ -1,0 +1,31 @@
+# Example game configuration for the Secret Hitler orchestrator.
+#
+# Usage:
+#   uv run python -m agents.orchestrator --config examples/game_config.yaml
+#
+# CLI arguments override config file values when both are provided.
+
+# ── Game settings ────────────────────────────────────────────────────────────
+
+players: 5
+seed: 42
+skin: secret_hitler
+
+# ── Model selection ──────────────────────────────────────────────────────────
+#
+# Single model for all players (backend:model format):
+model: claudecode:claude-sonnet-4-6
+
+# -- OR -- mixed models (one per player, must match player count):
+# models:
+#   - claudecode:claude-sonnet-4-6
+#   - claudecode:claude-opus-4-6
+#   - opencode:openai/gpt-4-turbo
+#   - opencode:openrouter/meta-llama/llama-4-maverick
+#   - claudecode:claude-haiku-4-5-20251001
+
+# ── Timing ───────────────────────────────────────────────────────────────────
+
+discussion_rounds: 2
+max_turns_action: 10
+max_turns_discussion: 5
