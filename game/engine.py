@@ -918,6 +918,7 @@ class GameEngine:
         This makes the peeked policies available via ``get_observation``
         before the president submits their acknowledgement.
         """
+        self._deck.reshuffle_if_needed()
         top_3 = self._deck.peek(3)
 
         # Record in round
