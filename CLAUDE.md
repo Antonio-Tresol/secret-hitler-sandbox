@@ -4,7 +4,7 @@ Research sandbox for studying deceptive alignment in multi-agent LLM systems.
 
 ## Quick Reference
 
-- **Stack**: Python >=3.11, uv, FastAPI, MCP SDK, OpenRouter
+- **Stack**: Python >=3.13, uv, FastAPI, MCP SDK, OpenRouter
 - **External dep**: [`agents`](https://github.com/Antonio-Tresol/agents) — custom agent framework
 - **Tests**: `uv run pytest tests/ -v -k "not e2e"` (415+)
 - **Server**: `uv run uvicorn server.app:app --port 8000`

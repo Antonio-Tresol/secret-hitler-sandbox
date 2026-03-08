@@ -90,7 +90,7 @@ history each time.
 
 ### Requirements
 
-- Python >= 3.11
+- Python >= 3.13
 - [uv](https://docs.astral.sh/uv/)
 - An [OpenRouter](https://openrouter.ai/) API key (set `OPENROUTER_API_KEY`
   in `.env`) — gives access to 200+ models with no extra tooling
