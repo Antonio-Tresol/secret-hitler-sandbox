@@ -91,11 +91,12 @@ history each time.
 
 - Python >= 3.11
 - [uv](https://docs.astral.sh/uv/)
-- At least one agent CLI, installed and authenticated:
-  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) for
-    Anthropic models
-  - [OpenCode](https://opencode.ai) for 75+ providers (OpenAI, Google,
-    OpenRouter, GitHub Copilot, etc.)
+- An [OpenRouter](https://openrouter.ai/) API key (set `OPENROUTER_API_KEY`
+  in `.env`) — gives access to 200+ models with no extra tooling
+- **Optional** CLI agents for their respective backends:
+  - [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+    (`claudecode:` backend)
+  - [OpenCode](https://opencode.ai) (`opencode:` backend)
 
 Install dependencies:
 
