@@ -165,9 +165,7 @@ class GameEngine:
                 len(self.living_players),
                 self._current_president,
             )
-            eligible = [
-                pid for pid in self.living_players if pid not in ineligible
-            ]
+            eligible = [pid for pid in self.living_players if pid not in ineligible]
             return PendingAction(
                 phase=self._phase,
                 expected_action=NominateChancellor,
@@ -176,9 +174,7 @@ class GameEngine:
             )
 
         if self._phase == GamePhase.ELECTION_VOTE:
-            still_needed = [
-                pid for pid in self.living_players if pid not in self._votes
-            ]
+            still_needed = [pid for pid in self.living_players if pid not in self._votes]
             return PendingAction(
                 phase=self._phase,
                 expected_action=CastVote,
@@ -217,8 +213,7 @@ class GameEngine:
             valid = [
                 pid
                 for pid in self.living_players
-                if pid != self._current_president
-                and pid not in self._investigated_players
+                if pid != self._current_president and pid not in self._investigated_players
             ]
             return PendingAction(
                 phase=self._phase,
@@ -236,11 +231,7 @@ class GameEngine:
             )
 
         if self._phase == GamePhase.EXECUTIVE_ACTION_SPECIAL_ELECTION:
-            valid = [
-                pid
-                for pid in self.living_players
-                if pid != self._current_president
-            ]
+            valid = [pid for pid in self.living_players if pid != self._current_president]
             return PendingAction(
                 phase=self._phase,
                 expected_action=SpecialElection,
@@ -249,11 +240,7 @@ class GameEngine:
             )
 
         if self._phase == GamePhase.EXECUTIVE_ACTION_EXECUTION:
-            valid = [
-                pid
-                for pid in self.living_players
-                if pid != self._current_president
-            ]
+            valid = [pid for pid in self.living_players if pid != self._current_president]
             return PendingAction(
                 phase=self._phase,
                 expected_action=ExecutePlayer,
@@ -364,15 +351,11 @@ class GameEngine:
                 elected=r.elected,
                 policy_enacted=r.policy_enacted.value if r.policy_enacted else None,
                 executive_power_used=(
-                    r.executive_power.value
-                    if r.executive_power and r.executive_power != ExecutivePower.NONE
-                    else None
+                    r.executive_power.value if r.executive_power and r.executive_power != ExecutivePower.NONE else None
                 ),
                 executive_target=r.executive_target,
                 chaos=r.chaos_policy is not None,
-                chaos_policy=(
-                    r.chaos_policy.value if r.chaos_policy else None
-                ),
+                chaos_policy=(r.chaos_policy.value if r.chaos_policy else None),
                 hitler_check_passed=r.hitler_check_passed,
             )
             history.append(summary.to_dict())
@@ -389,30 +372,19 @@ class GameEngine:
         obs["known_hitler"] = knowledge["known_hitler"]
 
         # --- phase-specific info ---
-        if (
-            self._phase == GamePhase.CHANCELLOR_NOMINATION
-            and player_id == self._current_president
-        ):
+        if self._phase == GamePhase.CHANCELLOR_NOMINATION and player_id == self._current_president:
             ineligible = get_ineligible_for_chancellor(
                 self._last_elected_president,
                 self._last_elected_chancellor,
                 len(self.living_players),
                 self._current_president,
             )
-            obs["eligible_chancellors"] = [
-                pid for pid in self.living_players if pid not in ineligible
-            ]
+            obs["eligible_chancellors"] = [pid for pid in self.living_players if pid not in ineligible]
 
-        if (
-            self._phase == GamePhase.LEGISLATIVE_PRESIDENT
-            and player_id == self._current_president
-        ):
+        if self._phase == GamePhase.LEGISLATIVE_PRESIDENT and player_id == self._current_president:
             obs["drawn_policies"] = [p.value for p in self._drawn_policies]
 
-        if (
-            self._phase == GamePhase.LEGISLATIVE_CHANCELLOR
-            and player_id == self._chancellor_nominee
-        ):
+        if self._phase == GamePhase.LEGISLATIVE_CHANCELLOR and player_id == self._chancellor_nominee:
             obs["received_policies"] = [p.value for p in self._chancellor_hand]
 
         if player_id in self._investigation_results:
@@ -516,13 +488,9 @@ class GameEngine:
 
     def _handle_nomination(self, action: NominateChancellor) -> dict:
         if self._phase != GamePhase.CHANCELLOR_NOMINATION:
-            raise IllegalActionError(
-                f"Cannot nominate chancellor during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot nominate chancellor during {self._phase.name}.")
         if action.player_id != self._current_president:
-            raise IllegalActionError(
-                f"Only the president (player {self._current_president}) can nominate."
-            )
+            raise IllegalActionError(f"Only the president (player {self._current_president}) can nominate.")
 
         ineligible = get_ineligible_for_chancellor(
             self._last_elected_president,
@@ -534,14 +502,10 @@ class GameEngine:
         if action.target_id in ineligible:
             raise IllegalActionError(
                 f"Player {action.target_id} is ineligible for chancellor.",
-                legal_actions=[
-                    pid for pid in self.living_players if pid not in ineligible
-                ],
+                legal_actions=[pid for pid in self.living_players if pid not in ineligible],
             )
         if not self.is_alive(action.target_id):
-            raise IllegalActionError(
-                f"Player {action.target_id} is dead and cannot be nominated."
-            )
+            raise IllegalActionError(f"Player {action.target_id} is dead and cannot be nominated.")
 
         self._chancellor_nominee = action.target_id
         self._current_round.chancellor_nominee = action.target_id
@@ -556,17 +520,11 @@ class GameEngine:
 
     def _handle_vote(self, action: CastVote) -> dict:
         if self._phase != GamePhase.ELECTION_VOTE:
-            raise IllegalActionError(
-                f"Cannot vote during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot vote during {self._phase.name}.")
         if action.player_id not in self.living_players:
-            raise IllegalActionError(
-                f"Player {action.player_id} is not alive."
-            )
+            raise IllegalActionError(f"Player {action.player_id} is not alive.")
         if action.player_id in self._votes:
-            raise IllegalActionError(
-                f"Player {action.player_id} has already voted."
-            )
+            raise IllegalActionError(f"Player {action.player_id} has already voted.")
 
         self._votes[action.player_id] = action.vote
 
@@ -603,9 +561,7 @@ class GameEngine:
                     # Fascist victory
                     self._current_round.hitler_check_passed = False
                     self._finalize_round()
-                    self._end_game(
-                        "fascist", WinCondition.FASCIST_HITLER_CHANCELLOR
-                    )
+                    self._end_game("fascist", WinCondition.FASCIST_HITLER_CHANCELLOR)
                     result["hitler_elected"] = True
                     return result
                 else:
@@ -654,9 +610,7 @@ class GameEngine:
         # Record chaos in the LAST finalized round
         self._round_history[-1].chaos_policy = top_policy
 
-        chaos_result: dict[str, Any] = ActionEvent(
-            event="chaos", data={"policy": top_policy.value}
-        ).to_dict()
+        chaos_result: dict[str, Any] = ActionEvent(event="chaos", data={"policy": top_policy.value}).to_dict()
 
         # Enact the policy (from_chaos=True: no executive power)
         self._enact_policy(top_policy, from_chaos=True)
@@ -671,21 +625,13 @@ class GameEngine:
 
     def _handle_president_discard(self, action: PresidentDiscard) -> dict:
         if self._phase != GamePhase.LEGISLATIVE_PRESIDENT:
-            raise IllegalActionError(
-                f"Cannot discard during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot discard during {self._phase.name}.")
         if action.player_id != self._current_president:
-            raise IllegalActionError(
-                f"Only the president (player {self._current_president}) can discard."
-            )
+            raise IllegalActionError(f"Only the president (player {self._current_president}) can discard.")
         if action.discard_index not in (0, 1, 2):
-            raise IllegalActionError(
-                f"discard_index must be 0, 1, or 2, got {action.discard_index}."
-            )
+            raise IllegalActionError(f"discard_index must be 0, 1, or 2, got {action.discard_index}.")
         if action.discard_index >= len(self._drawn_policies):
-            raise IllegalActionError(
-                f"discard_index {action.discard_index} out of range."
-            )
+            raise IllegalActionError(f"discard_index {action.discard_index} out of range.")
 
         discarded = self._drawn_policies.pop(action.discard_index)
         self._deck.discard(discarded)
@@ -696,49 +642,41 @@ class GameEngine:
         self._current_round.policies_to_chancellor = list(self._chancellor_hand)
 
         # Record private event for president
-        self._private_events[self._current_president].append(PrivateEvent(
-            round=self._round_number,
-            type="legislative_president",
-            details={
-                "drawn": [p.value for p in self._current_round.policies_drawn],
-                "discarded": discarded.value,
-                "passed_to_chancellor": [p.value for p in self._chancellor_hand],
-            },
-        ))
+        self._private_events[self._current_president].append(
+            PrivateEvent(
+                round=self._round_number,
+                type="legislative_president",
+                details={
+                    "drawn": [p.value for p in self._current_round.policies_drawn],
+                    "discarded": discarded.value,
+                    "passed_to_chancellor": [p.value for p in self._chancellor_hand],
+                },
+            ),
+        )
 
         self._phase = GamePhase.LEGISLATIVE_CHANCELLOR
         return ActionEvent(event="president_discarded", data={"discard_index": action.discard_index}).to_dict()
 
     def _handle_chancellor_enact(self, action: ChancellorEnact) -> dict:
         if self._phase != GamePhase.LEGISLATIVE_CHANCELLOR:
-            raise IllegalActionError(
-                f"Cannot enact during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot enact during {self._phase.name}.")
         if action.player_id != self._chancellor_nominee:
-            raise IllegalActionError(
-                f"Only the chancellor (player {self._chancellor_nominee}) can enact."
-            )
+            raise IllegalActionError(f"Only the chancellor (player {self._chancellor_nominee}) can enact.")
 
         # Veto request
         if action.enact_index is None:
             if not self._veto_unlocked:
                 raise IllegalActionError("Veto power has not been unlocked.")
             if self._veto_refused_this_session:
-                raise IllegalActionError(
-                    "The president already refused a veto this session."
-                )
+                raise IllegalActionError("The president already refused a veto this session.")
             self._current_round.veto_attempted = True
             self._phase = GamePhase.VETO_RESPONSE
             return ActionEvent(event="veto_requested").to_dict()
 
         if action.enact_index not in (0, 1):
-            raise IllegalActionError(
-                f"enact_index must be 0 or 1, got {action.enact_index}."
-            )
+            raise IllegalActionError(f"enact_index must be 0 or 1, got {action.enact_index}.")
         if action.enact_index >= len(self._chancellor_hand):
-            raise IllegalActionError(
-                f"enact_index {action.enact_index} out of range."
-            )
+            raise IllegalActionError(f"enact_index {action.enact_index} out of range.")
 
         enacted = self._chancellor_hand[action.enact_index]
         discarded_idx = 1 - action.enact_index
@@ -750,15 +688,17 @@ class GameEngine:
         self._current_round.policy_enacted = enacted
 
         # Record private event for chancellor
-        self._private_events[self._chancellor_nominee].append(PrivateEvent(
-            round=self._round_number,
-            type="legislative_chancellor",
-            details={
-                "received": [p.value for p in self._chancellor_hand],
-                "enacted": enacted.value,
-                "discarded": discarded.value,
-            },
-        ))
+        self._private_events[self._chancellor_nominee].append(
+            PrivateEvent(
+                round=self._round_number,
+                type="legislative_chancellor",
+                details={
+                    "received": [p.value for p in self._chancellor_hand],
+                    "enacted": enacted.value,
+                    "discarded": discarded.value,
+                },
+            ),
+        )
 
         self._finalize_round()
         self._enact_policy(enacted, from_chaos=False)
@@ -771,13 +711,9 @@ class GameEngine:
 
     def _handle_veto_response(self, action: VetoResponse) -> dict:
         if self._phase != GamePhase.VETO_RESPONSE:
-            raise IllegalActionError(
-                f"Cannot respond to veto during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot respond to veto during {self._phase.name}.")
         if action.player_id != self._current_president:
-            raise IllegalActionError(
-                f"Only the president (player {self._current_president}) can respond to veto."
-            )
+            raise IllegalActionError(f"Only the president (player {self._current_president}) can respond to veto.")
 
         if action.consent:
             # Veto succeeds: discard both remaining policies
@@ -809,7 +745,7 @@ class GameEngine:
     #  Policy Enactment                                                    #
     # ------------------------------------------------------------------ #
 
-    def _enact_policy(self, policy: PolicyType, from_chaos: bool = False) -> None:
+    def _enact_policy(self, policy: PolicyType, *, from_chaos: bool = False) -> None:
         """Enact a policy: update board, check win, check executive power."""
         if policy == PolicyType.LIBERAL:
             self._liberal_policies += 1
@@ -863,21 +799,15 @@ class GameEngine:
 
     def _handle_investigate(self, action: InvestigatePlayer) -> dict:
         if self._phase != GamePhase.EXECUTIVE_ACTION_INVESTIGATE:
-            raise IllegalActionError(
-                f"Cannot investigate during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot investigate during {self._phase.name}.")
         if action.player_id != self._current_president:
-            raise IllegalActionError(
-                f"Only the president (player {self._current_president}) can investigate."
-            )
+            raise IllegalActionError(f"Only the president (player {self._current_president}) can investigate.")
         if action.target_id == self._current_president:
             raise IllegalActionError("The president cannot investigate themselves.")
         if not self.is_alive(action.target_id):
             raise IllegalActionError(f"Player {action.target_id} is dead.")
         if action.target_id in self._investigated_players:
-            raise IllegalActionError(
-                f"Player {action.target_id} has already been investigated."
-            )
+            raise IllegalActionError(f"Player {action.target_id} has already been investigated.")
 
         target_party = self._players[action.target_id].party
         self._investigated_players.add(action.target_id)
@@ -895,14 +825,16 @@ class GameEngine:
         self._investigation_results[self._current_president] = inv_result
 
         # Private event
-        self._private_events[self._current_president].append(PrivateEvent(
-            round=self._round_number,
-            type="investigation",
-            details={
-                "target": action.target_id,
-                "party": target_party.value,
-            },
-        ))
+        self._private_events[self._current_president].append(
+            PrivateEvent(
+                round=self._round_number,
+                type="investigation",
+                details={
+                    "target": action.target_id,
+                    "party": target_party.value,
+                },
+            ),
+        )
 
         self._deck.reshuffle_if_needed()
         self._begin_round()
@@ -932,23 +864,21 @@ class GameEngine:
         )
 
         # Private event
-        self._private_events[self._current_president].append(PrivateEvent(
-            round=self._round_number,
-            type="policy_peek",
-            details={
-                "policies": [p.value for p in top_3],
-            },
-        ))
+        self._private_events[self._current_president].append(
+            PrivateEvent(
+                round=self._round_number,
+                type="policy_peek",
+                details={
+                    "policies": [p.value for p in top_3],
+                },
+            ),
+        )
 
     def _handle_peek(self, action: PolicyPeekAck) -> dict:
         if self._phase != GamePhase.EXECUTIVE_ACTION_PEEK:
-            raise IllegalActionError(
-                f"Cannot peek during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot peek during {self._phase.name}.")
         if action.player_id != self._current_president:
-            raise IllegalActionError(
-                f"Only the president (player {self._current_president}) can acknowledge peek."
-            )
+            raise IllegalActionError(f"Only the president (player {self._current_president}) can acknowledge peek.")
 
         # The actual peek was already performed in _prepare_peek when the
         # phase was entered.  Retrieve the stored result for the return value.
@@ -957,23 +887,17 @@ class GameEngine:
         self._deck.reshuffle_if_needed()
         self._begin_round()
 
-        return ActionEvent(
-            event="policy_peek", data={"policies": policies}
-        ).to_dict()
+        return ActionEvent(event="policy_peek", data={"policies": policies}).to_dict()
 
     def _handle_special_election(self, action: SpecialElection) -> dict:
         if self._phase != GamePhase.EXECUTIVE_ACTION_SPECIAL_ELECTION:
-            raise IllegalActionError(
-                f"Cannot call special election during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot call special election during {self._phase.name}.")
         if action.player_id != self._current_president:
             raise IllegalActionError(
-                f"Only the president (player {self._current_president}) can call a special election."
+                f"Only the president (player {self._current_president}) can call a special election.",
             )
         if action.target_id == self._current_president:
-            raise IllegalActionError(
-                "The president cannot designate themselves for special election."
-            )
+            raise IllegalActionError("The president cannot designate themselves for special election.")
         if not self.is_alive(action.target_id):
             raise IllegalActionError(f"Player {action.target_id} is dead.")
 
@@ -1008,13 +932,9 @@ class GameEngine:
 
     def _handle_execution(self, action: ExecutePlayer) -> dict:
         if self._phase != GamePhase.EXECUTIVE_ACTION_EXECUTION:
-            raise IllegalActionError(
-                f"Cannot execute during {self._phase.name}."
-            )
+            raise IllegalActionError(f"Cannot execute during {self._phase.name}.")
         if action.player_id != self._current_president:
-            raise IllegalActionError(
-                f"Only the president (player {self._current_president}) can execute."
-            )
+            raise IllegalActionError(f"Only the president (player {self._current_president}) can execute.")
         if action.target_id == self._current_president:
             raise IllegalActionError("The president cannot execute themselves.")
         if not self.is_alive(action.target_id):

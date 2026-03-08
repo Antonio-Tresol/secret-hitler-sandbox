@@ -23,7 +23,6 @@ from game.types import (
     Role,
 )
 
-
 # ===================================================================== #
 #  Unit Tests – get_ineligible_for_chancellor                            #
 # ===================================================================== #
@@ -56,9 +55,7 @@ class TestGetIneligibleForChancellor:
             living_player_count=5,
             candidate_president=0,
         )
-        assert 1 not in ineligible, (
-            "last elected president should be eligible under 5-player exception"
-        )
+        assert 1 not in ineligible, "last elected president should be eligible under 5-player exception"
         assert 2 in ineligible, "last elected chancellor should still be ineligible"
         assert 0 in ineligible, "candidate president should be ineligible"
         assert ineligible == {0, 2}
@@ -145,7 +142,7 @@ class TestGetIneligibleForChancellor:
 # ===================================================================== #
 
 
-def _pass_vote(engine: GameEngine, vote: bool) -> dict:
+def _pass_vote(engine: GameEngine, *, vote: bool) -> dict:
     """Have all living players cast the same *vote*. Returns the last
     submit_action result (which contains the election outcome)."""
     result = None
@@ -167,10 +164,8 @@ def _run_successful_election(
     if chancellor_id is None:
         chancellor_id = pa.legal_targets[0]
 
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor_id)
-    )
-    return _pass_vote(engine, True)
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_id))
+    return _pass_vote(engine, vote=True)
 
 
 def _run_failed_election(engine: GameEngine) -> dict:
@@ -180,10 +175,8 @@ def _run_failed_election(engine: GameEngine) -> dict:
     president = pa.required_by
     chancellor_id = pa.legal_targets[0]
 
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor_id)
-    )
-    return _pass_vote(engine, False)
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_id))
+    return _pass_vote(engine, vote=False)
 
 
 def _complete_legislative_session(engine: GameEngine) -> dict:
@@ -197,9 +190,7 @@ def _complete_legislative_session(engine: GameEngine) -> dict:
     pa = engine.pending_action
     assert pa.phase == GamePhase.LEGISLATIVE_CHANCELLOR
     chancellor = pa.required_by
-    result = engine.submit_action(
-        ChancellorEnact(player_id=chancellor, enact_index=0)
-    )
+    result = engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=0))
     return result
 
 
@@ -214,11 +205,7 @@ def _handle_executive_action(engine: GameEngine) -> None:
         from game.types import InvestigatePlayer
 
         pa = engine.pending_action
-        engine.submit_action(
-            InvestigatePlayer(
-                player_id=pa.required_by, target_id=pa.legal_targets[0]
-            )
-        )
+        engine.submit_action(InvestigatePlayer(player_id=pa.required_by, target_id=pa.legal_targets[0]))
     elif phase == GamePhase.EXECUTIVE_ACTION_PEEK:
         from game.types import PolicyPeekAck
 
@@ -228,31 +215,22 @@ def _handle_executive_action(engine: GameEngine) -> None:
         from game.types import SpecialElection
 
         pa = engine.pending_action
-        engine.submit_action(
-            SpecialElection(
-                player_id=pa.required_by, target_id=pa.legal_targets[0]
-            )
-        )
+        engine.submit_action(SpecialElection(player_id=pa.required_by, target_id=pa.legal_targets[0]))
     elif phase == GamePhase.EXECUTIVE_ACTION_EXECUTION:
         pa = engine.pending_action
         # Pick a non-Hitler target to avoid ending the game
         for tid in pa.legal_targets:
             if engine.get_player_role(tid) != Role.HITLER:
-                engine.submit_action(
-                    ExecutePlayer(player_id=pa.required_by, target_id=tid)
-                )
+                engine.submit_action(ExecutePlayer(player_id=pa.required_by, target_id=tid))
                 return
         # Fallback: all targets are Hitler (shouldn't happen), just pick first
-        engine.submit_action(
-            ExecutePlayer(
-                player_id=pa.required_by, target_id=pa.legal_targets[0]
-            )
-        )
+        engine.submit_action(ExecutePlayer(player_id=pa.required_by, target_id=pa.legal_targets[0]))
 
 
 def _play_full_round(
     engine: GameEngine,
     chancellor_id: int | None = None,
+    *,
     expect_pass: bool = True,
 ) -> None:
     """Drive the engine through a full round: nomination, vote, and
@@ -277,11 +255,7 @@ def _play_full_round(
 
 def _find_non_hitler_players(engine: GameEngine) -> list[int]:
     """Return a list of player_ids that are NOT Hitler."""
-    return [
-        pid
-        for pid in range(engine.num_players)
-        if engine.get_player_role(pid) != Role.HITLER
-    ]
+    return [pid for pid in range(engine.num_players) if engine.get_player_role(pid) != Role.HITLER]
 
 
 def _create_game(num_players: int = 7, seed: int = 42) -> GameEngine:
@@ -347,12 +321,8 @@ class TestFivePlayerExceptionOnDeath:
                     if chancellor is None:
                         break
 
-                    engine.submit_action(
-                        NominateChancellor(
-                            player_id=president, target_id=chancellor
-                        )
-                    )
-                    _pass_vote(engine, True)
+                    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor))
+                    _pass_vote(engine, vote=True)
 
                     if engine.is_game_over:
                         break
@@ -369,19 +339,12 @@ class TestFivePlayerExceptionOnDeath:
                         # Execute a non-Hitler, non-president target
                         target = None
                         for tid in pa.legal_targets:
-                            if (
-                                engine.get_player_role(tid) != Role.HITLER
-                                and tid != president
-                            ):
+                            if engine.get_player_role(tid) != Role.HITLER and tid != president:
                                 target = tid
                                 break
                         if target is None:
                             break
-                        engine.submit_action(
-                            ExecutePlayer(
-                                player_id=pa.required_by, target_id=target
-                            )
-                        )
+                        engine.submit_action(ExecutePlayer(player_id=pa.required_by, target_id=target))
                         if engine.is_game_over:
                             break
                         executed_count += 1
@@ -428,8 +391,7 @@ class TestFivePlayerExceptionOnDeath:
                 # happen to be the current president candidate)
                 if last_chan != current_pres and engine.is_alive(last_chan):
                     assert last_chan not in eligible, (
-                        f"Last chancellor {last_chan} should be ineligible. "
-                        f"Eligible: {eligible}"
+                        f"Last chancellor {last_chan} should be ineligible. Eligible: {eligible}"
                     )
 
                 # Test passed with this seed
@@ -438,10 +400,7 @@ class TestFivePlayerExceptionOnDeath:
             except (IllegalActionError, Exception):
                 continue
 
-        pytest.fail(
-            "Could not find a seed that allows executing 2 players "
-            "to test the 5-player exception."
-        )
+        pytest.fail("Could not find a seed that allows executing 2 players to test the 5-player exception.")
 
 
 class TestTermLimitsResetOnChaos:
@@ -474,12 +433,8 @@ class TestTermLimitsResetOnChaos:
                 if chancellor_r1 is None:
                     continue
 
-                engine.submit_action(
-                    NominateChancellor(
-                        player_id=president_r1, target_id=chancellor_r1
-                    )
-                )
-                _pass_vote(engine, True)
+                engine.submit_action(NominateChancellor(player_id=president_r1, target_id=chancellor_r1))
+                _pass_vote(engine, vote=True)
 
                 if engine.is_game_over:
                     continue
@@ -509,12 +464,8 @@ class TestTermLimitsResetOnChaos:
                     continue
 
                 # After chaos, term limits should be reset
-                assert engine.last_elected_president is None, (
-                    "last_elected_president should be None after chaos"
-                )
-                assert engine.last_elected_chancellor is None, (
-                    "last_elected_chancellor should be None after chaos"
-                )
+                assert engine.last_elected_president is None, "last_elected_president should be None after chaos"
+                assert engine.last_elected_chancellor is None, "last_elected_chancellor should be None after chaos"
 
                 # Verify the previously term-limited players are now eligible
                 pa = engine.pending_action
@@ -526,13 +477,11 @@ class TestTermLimitsResetOnChaos:
                 # (unless one of them is the current presidential candidate)
                 if president_r1 != current_pres:
                     assert president_r1 in eligible, (
-                        f"Player {president_r1} (former president) should be "
-                        f"eligible after chaos reset"
+                        f"Player {president_r1} (former president) should be eligible after chaos reset"
                     )
                 if chancellor_r1 != current_pres:
                     assert chancellor_r1 in eligible, (
-                        f"Player {chancellor_r1} (former chancellor) should be "
-                        f"eligible after chaos reset"
+                        f"Player {chancellor_r1} (former chancellor) should be eligible after chaos reset"
                     )
 
                 return  # Test passed
@@ -540,9 +489,7 @@ class TestTermLimitsResetOnChaos:
             except (IllegalActionError, Exception):
                 continue
 
-        pytest.fail(
-            "Could not find a seed that allows testing chaos term-limit reset."
-        )
+        pytest.fail("Could not find a seed that allows testing chaos term-limit reset.")
 
 
 class TestFailedElectionDoesNotUpdateTermLimits:
@@ -572,12 +519,8 @@ class TestFailedElectionDoesNotUpdateTermLimits:
                 if chancellor_r1 is None:
                     continue
 
-                engine.submit_action(
-                    NominateChancellor(
-                        player_id=president_r1, target_id=chancellor_r1
-                    )
-                )
-                _pass_vote(engine, True)
+                engine.submit_action(NominateChancellor(player_id=president_r1, target_id=chancellor_r1))
+                _pass_vote(engine, vote=True)
 
                 if engine.is_game_over:
                     continue
@@ -602,12 +545,8 @@ class TestFailedElectionDoesNotUpdateTermLimits:
                 eligible_r2 = pa.legal_targets
                 chancellor_r2 = eligible_r2[0]
 
-                engine.submit_action(
-                    NominateChancellor(
-                        player_id=president_r2, target_id=chancellor_r2
-                    )
-                )
-                _pass_vote(engine, False)
+                engine.submit_action(NominateChancellor(player_id=president_r2, target_id=chancellor_r2))
+                _pass_vote(engine, vote=False)
 
                 if engine.is_game_over:
                     continue
@@ -625,9 +564,7 @@ class TestFailedElectionDoesNotUpdateTermLimits:
             except (IllegalActionError, Exception):
                 continue
 
-        pytest.fail(
-            "Could not find a seed for testing failed election term limits."
-        )
+        pytest.fail("Could not find a seed for testing failed election term limits.")
 
 
 class TestTermLimitsApplyToChancellorshipOnly:
@@ -675,12 +612,8 @@ class TestTermLimitsApplyToChancellorshipOnly:
                     if chancellor is None:
                         break
 
-                    engine.submit_action(
-                        NominateChancellor(
-                            player_id=president, target_id=chancellor
-                        )
-                    )
-                    _pass_vote(engine, True)
+                    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor))
+                    _pass_vote(engine, vote=True)
 
                     if engine.is_game_over:
                         break
@@ -695,9 +628,7 @@ class TestTermLimitsApplyToChancellorshipOnly:
             except (IllegalActionError, Exception):
                 continue
 
-        pytest.fail(
-            "Could not verify that last chancellor can become president."
-        )
+        pytest.fail("Could not verify that last chancellor can become president.")
 
 
 class TestEligibleChancellorsListCorrect:
@@ -728,12 +659,8 @@ class TestEligibleChancellorsListCorrect:
                 if chancellor_r1 is None:
                     continue
 
-                engine.submit_action(
-                    NominateChancellor(
-                        player_id=president_r1, target_id=chancellor_r1
-                    )
-                )
-                _pass_vote(engine, True)
+                engine.submit_action(NominateChancellor(player_id=president_r1, target_id=chancellor_r1))
+                _pass_vote(engine, vote=True)
 
                 if engine.is_game_over:
                     continue
@@ -753,9 +680,7 @@ class TestEligibleChancellorsListCorrect:
                 obs = engine.get_observation(president_r2)
 
                 # The observation should include eligible_chancellors
-                assert "eligible_chancellors" in obs, (
-                    "President's observation should include eligible_chancellors"
-                )
+                assert "eligible_chancellors" in obs, "President's observation should include eligible_chancellors"
 
                 eligible_from_obs = obs["eligible_chancellors"]
                 eligible_from_pending = pa.legal_targets
@@ -773,12 +698,8 @@ class TestEligibleChancellorsListCorrect:
                 last_pres = engine.last_elected_president
                 last_chan = engine.last_elected_chancellor
 
-                ineligible = get_ineligible_for_chancellor(
-                    last_pres, last_chan, len(living), president_r2
-                )
-                expected_eligible = [
-                    pid for pid in living if pid not in ineligible
-                ]
+                ineligible = get_ineligible_for_chancellor(last_pres, last_chan, len(living), president_r2)
+                expected_eligible = [pid for pid in living if pid not in ineligible]
 
                 assert sorted(eligible_from_obs) == sorted(expected_eligible), (
                     f"Eligible chancellors {eligible_from_obs} don't match "
@@ -791,18 +712,11 @@ class TestEligibleChancellorsListCorrect:
                 assert president_r2 not in eligible_from_obs
                 # - last chancellor is NOT in eligible list
                 if last_chan is not None and last_chan != president_r2:
-                    assert last_chan not in eligible_from_obs, (
-                        f"Last chancellor {last_chan} should not be eligible"
-                    )
+                    assert last_chan not in eligible_from_obs, f"Last chancellor {last_chan} should not be eligible"
                 # - last president is NOT in eligible list (>5 players)
-                if (
-                    last_pres is not None
-                    and last_pres != president_r2
-                    and len(living) > 5
-                ):
+                if last_pres is not None and last_pres != president_r2 and len(living) > 5:
                     assert last_pres not in eligible_from_obs, (
-                        f"Last president {last_pres} should not be eligible "
-                        f"with {len(living)} players"
+                        f"Last president {last_pres} should not be eligible with {len(living)} players"
                     )
 
                 return  # Test passed
@@ -810,9 +724,7 @@ class TestEligibleChancellorsListCorrect:
             except (IllegalActionError, Exception):
                 continue
 
-        pytest.fail(
-            "Could not find a seed to test eligible_chancellors observation."
-        )
+        pytest.fail("Could not find a seed to test eligible_chancellors observation.")
 
 
 class TestEligibleChancellorsFirstRound:
@@ -864,12 +776,8 @@ class TestNominatingIneligibleRaises:
                 if chancellor_r1 is None:
                     continue
 
-                engine.submit_action(
-                    NominateChancellor(
-                        player_id=president_r1, target_id=chancellor_r1
-                    )
-                )
-                _pass_vote(engine, True)
+                engine.submit_action(NominateChancellor(player_id=president_r1, target_id=chancellor_r1))
+                _pass_vote(engine, vote=True)
                 if engine.is_game_over:
                     continue
 
@@ -891,13 +799,11 @@ class TestNominatingIneligibleRaises:
                             NominateChancellor(
                                 player_id=president_r2,
                                 target_id=chancellor_r1,
-                            )
+                            ),
                         )
                     return  # Test passed
 
             except (IllegalActionError, Exception):
                 continue
 
-        pytest.fail(
-            "Could not find a seed to test nominating ineligible chancellor."
-        )
+        pytest.fail("Could not find a seed to test nominating ineligible chancellor.")

@@ -18,9 +18,7 @@ class PolicyDeck:
 
     def __init__(self, rng: _random.Random) -> None:
         self._rng = rng
-        self._draw_pile: list[PolicyType] = (
-            [PolicyType.FASCIST] * 11 + [PolicyType.LIBERAL] * 6
-        )
+        self._draw_pile: list[PolicyType] = [PolicyType.FASCIST] * 11 + [PolicyType.LIBERAL] * 6
         self._discard_pile: list[PolicyType] = []
         self._rng.shuffle(self._draw_pile)
 
@@ -36,8 +34,7 @@ class PolicyDeck:
         """Draw n tiles from the top of the draw pile."""
         if len(self._draw_pile) < n:
             raise RuntimeError(
-                f"Cannot draw {n} tiles: only {len(self._draw_pile)} remain. "
-                f"Call reshuffle_if_needed() first."
+                f"Cannot draw {n} tiles: only {len(self._draw_pile)} remain. Call reshuffle_if_needed() first.",
             )
         drawn = self._draw_pile[:n]
         self._draw_pile = self._draw_pile[n:]
@@ -50,9 +47,7 @@ class PolicyDeck:
     def peek(self, n: int = 3) -> list[PolicyType]:
         """Look at the top n tiles without removing them."""
         if len(self._draw_pile) < n:
-            raise RuntimeError(
-                f"Cannot peek {n} tiles: only {len(self._draw_pile)} remain."
-            )
+            raise RuntimeError(f"Cannot peek {n} tiles: only {len(self._draw_pile)} remain.")
         return list(self._draw_pile[:n])
 
     def reshuffle_if_needed(self) -> bool:

@@ -36,15 +36,10 @@ def assign_roles(num_players: int, rng: _random.Random) -> list[PlayerState]:
 
     rng.shuffle(roles)
 
-    return [
-        PlayerState(player_id=i, role=role, party=party)
-        for i, (role, party) in enumerate(roles)
-    ]
+    return [PlayerState(player_id=i, role=role, party=party) for i, (role, party) in enumerate(roles)]
 
 
-def get_knowledge(
-    player_id: int, players: list[PlayerState], num_players: int
-) -> dict:
+def get_knowledge(player_id: int, players: list[PlayerState], num_players: int) -> dict:
     """
     Return what a player knows about others at game start.
 
@@ -78,11 +73,7 @@ def get_knowledge(
     # Hitler
     if num_players <= 6:
         # Hitler sees fascists in small games
-        known_fascists = [
-            p.player_id
-            for p in players
-            if p.player_id != player_id and p.role == Role.FASCIST
-        ]
+        known_fascists = [p.player_id for p in players if p.player_id != player_id and p.role == Role.FASCIST]
         return {"known_fascists": known_fascists, "known_hitler": None}
     else:
         # Hitler is blind in 7+ player games

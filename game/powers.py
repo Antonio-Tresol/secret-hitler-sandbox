@@ -42,9 +42,7 @@ def get_track_key(num_players: int) -> str:
         return "large"
 
 
-def get_executive_power(
-    num_players: int, fascist_policy_count: int
-) -> ExecutivePower:
+def get_executive_power(num_players: int, fascist_policy_count: int) -> ExecutivePower:
     """
     Return the executive power triggered by the Nth fascist policy.
 

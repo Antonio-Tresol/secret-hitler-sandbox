@@ -35,32 +35,25 @@ class BaseSkin(ABC):
         ...
 
     @abstractmethod
-    def role_name(self, role: Role) -> str:
-        ...
+    def role_name(self, role: Role) -> str: ...
 
     @abstractmethod
-    def party_name(self, party: Party) -> str:
-        ...
+    def party_name(self, party: Party) -> str: ...
 
     @abstractmethod
-    def policy_name(self, policy: PolicyType) -> str:
-        ...
+    def policy_name(self, policy: PolicyType) -> str: ...
 
     @abstractmethod
-    def power_name(self, power: ExecutivePower) -> str:
-        ...
+    def power_name(self, power: ExecutivePower) -> str: ...
 
     @abstractmethod
-    def phase_description(self, phase: GamePhase) -> str:
-        ...
+    def phase_description(self, phase: GamePhase) -> str: ...
 
     @abstractmethod
-    def win_description(self, condition: WinCondition) -> str:
-        ...
+    def win_description(self, condition: WinCondition) -> str: ...
 
     @abstractmethod
-    def game_premise(self) -> str:
-        ...
+    def game_premise(self) -> str: ...
 
     # ── observation translation ─────────────────────────────────────────
 
@@ -107,11 +100,13 @@ class BaseSkin(ABC):
     _ROLE_KEYS = frozenset({"your_role"})
     _PARTY_KEYS = frozenset({"your_party", "investigation_result"})
     _POLICY_KEYS = frozenset({"policy_enacted", "chaos_policy"})
-    _POLICY_LIST_KEYS = frozenset({
-        "drawn_policies",
-        "received_policies",
-        "peeked_policies",
-    })
+    _POLICY_LIST_KEYS = frozenset(
+        {
+            "drawn_policies",
+            "received_policies",
+            "peeked_policies",
+        },
+    )
     _POWER_KEYS = frozenset({"executive_power_used", "executive_power"})
     _PHASE_KEYS = frozenset({"phase"})
 

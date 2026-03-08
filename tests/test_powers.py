@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import random as _random
-
 import pytest
 
 from game.engine import GameEngine
-from game.policies import PolicyDeck
-from game.powers import POWER_TRACKS, get_executive_power, get_track_key
+from game.powers import get_executive_power, get_track_key
 from game.types import (
     CastVote,
     ChancellorEnact,
@@ -26,7 +23,6 @@ from game.types import (
     SpecialElection,
     WinCondition,
 )
-
 
 # ──────────────────────────────────────────────────────────────
 #  Helpers
@@ -61,9 +57,7 @@ def _play_legislative_fascist(engine: GameEngine) -> None:
         if p == PolicyType.LIBERAL:
             discard_idx = i
             break
-    engine.submit_action(
-        PresidentDiscard(player_id=president, discard_index=discard_idx)
-    )
+    engine.submit_action(PresidentDiscard(player_id=president, discard_index=discard_idx))
     if engine.is_game_over:
         return
 
@@ -76,9 +70,7 @@ def _play_legislative_fascist(engine: GameEngine) -> None:
         if p == PolicyType.FASCIST:
             enact_idx = i
             break
-    engine.submit_action(
-        ChancellorEnact(player_id=chancellor, enact_index=enact_idx)
-    )
+    engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=enact_idx))
 
 
 def _nominate_and_elect(engine: GameEngine, chancellor_target: int | None = None) -> bool:
@@ -88,9 +80,7 @@ def _nominate_and_elect(engine: GameEngine, chancellor_target: int | None = None
     president = pa.required_by
     if chancellor_target is None:
         chancellor_target = pa.legal_targets[0]
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor_target)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
     if engine.is_game_over:
         return False
 
@@ -152,7 +142,6 @@ def _advance_to_fascist_count(engine: GameEngine, target_count: int) -> None:
     hitler_id = roles["hitler"][0]
 
     while engine.fascist_policy_count < target_count and not engine.is_game_over:
-        before = engine.fascist_policy_count
         chancellor = _safe_chancellor(engine, hitler_id)
         _play_round(engine, chancellor_target=chancellor)
 
@@ -200,7 +189,7 @@ def _find_good_seed(
 
     raise RuntimeError(
         f"Could not find a working seed for {num_players} players, "
-        f"{target_fascist} fascist policies (tried {max_seed} seeds)."
+        f"{target_fascist} fascist policies (tried {max_seed} seeds).",
     )
 
 
@@ -300,9 +289,7 @@ def test_investigate_reveals_party_not_role() -> None:
         fascist_targets = [t for t in pa.legal_targets if engine.get_player_party(t) == Party.FASCIST]
         target = fascist_targets[0] if fascist_targets else pa.legal_targets[0]
 
-    result = engine.submit_action(
-        InvestigatePlayer(player_id=president, target_id=target)
-    )
+    result = engine.submit_action(InvestigatePlayer(player_id=president, target_id=target))
     # Result should contain party string, not role
     assert result["party"] in ("fascist", "liberal")
     if engine.get_player_party(target) == Party.FASCIST:
@@ -331,7 +318,7 @@ def test_investigate_cannot_target_same_player_twice() -> None:
             engine = GameEngine(num_players=9, seed=seed)
             engine.setup()
 
-            roles = _find_players_by_role(engine)
+            _find_players_by_role(engine)
 
             # Get to 1st fascist policy -> investigate
             _advance_to_fascist_count(engine, target_count=1)
@@ -345,9 +332,7 @@ def test_investigate_cannot_target_same_player_twice() -> None:
             president1 = pa.required_by
             first_target = pa.legal_targets[0]
 
-            engine.submit_action(
-                InvestigatePlayer(player_id=president1, target_id=first_target)
-            )
+            engine.submit_action(InvestigatePlayer(player_id=president1, target_id=first_target))
 
             # Now advance to 2nd fascist policy -> another investigate
             _advance_to_fascist_count(engine, target_count=2)
@@ -369,9 +354,7 @@ def test_investigate_cannot_target_same_player_twice() -> None:
 
             # Attempting to investigate them again should raise
             with pytest.raises(IllegalActionError, match="already been investigated"):
-                engine.submit_action(
-                    InvestigatePlayer(player_id=president2, target_id=first_target)
-                )
+                engine.submit_action(InvestigatePlayer(player_id=president2, target_id=first_target))
             return
         except (AssertionError, IllegalActionError):
             continue
@@ -397,9 +380,7 @@ def test_investigate_cannot_target_self() -> None:
     president = pa.required_by
 
     with pytest.raises(IllegalActionError, match="cannot investigate themselves"):
-        engine.submit_action(
-            InvestigatePlayer(player_id=president, target_id=president)
-        )
+        engine.submit_action(InvestigatePlayer(player_id=president, target_id=president))
 
 
 # ──────────────────────────────────────────────────────────────
@@ -424,9 +405,7 @@ def test_investigate_cannot_target_dead_player() -> None:
     engine._players[target].alive = False
 
     with pytest.raises(IllegalActionError, match="dead"):
-        engine.submit_action(
-            InvestigatePlayer(player_id=president, target_id=target)
-        )
+        engine.submit_action(InvestigatePlayer(player_id=president, target_id=target))
 
     # Restore so engine state isn't corrupt for cleanup
     engine._players[target].alive = True
@@ -528,9 +507,7 @@ def test_special_election_sets_next_president() -> None:
     president = pa.required_by
 
     target = pa.legal_targets[0]
-    engine.submit_action(
-        SpecialElection(player_id=president, target_id=target)
-    )
+    engine.submit_action(SpecialElection(player_id=president, target_id=target))
 
     # The next round should have 'target' as president
     assert engine.current_president == target
@@ -570,9 +547,7 @@ def test_special_election_returns_to_rotation() -> None:
     target = [t for t in pa.legal_targets if t != expected_next]
     se_target = target[0] if target else pa.legal_targets[0]
 
-    engine.submit_action(
-        SpecialElection(player_id=caller_president, target_id=se_target)
-    )
+    engine.submit_action(SpecialElection(player_id=caller_president, target_id=se_target))
 
     # SE round: play it through
     assert engine.current_president == se_target
@@ -617,16 +592,12 @@ def test_special_election_can_target_term_limited_player() -> None:
     last_chancellor = engine.last_elected_chancellor
     if last_chancellor is not None and last_chancellor != president and engine.is_alive(last_chancellor):
         assert last_chancellor in pa.legal_targets
-        engine.submit_action(
-            SpecialElection(player_id=president, target_id=last_chancellor)
-        )
+        engine.submit_action(SpecialElection(player_id=president, target_id=last_chancellor))
         assert engine.current_president == last_chancellor
     else:
         # Fallback: at minimum verify any living non-president is valid
         target = pa.legal_targets[0]
-        engine.submit_action(
-            SpecialElection(player_id=president, target_id=target)
-        )
+        engine.submit_action(SpecialElection(player_id=president, target_id=target))
         assert engine.current_president == target
 
 
@@ -689,9 +660,7 @@ def test_execution_hitler_ends_game() -> None:
                 continue
 
             # Found a good seed
-            result = engine.submit_action(
-                ExecutePlayer(player_id=president, target_id=hitler_id)
-            )
+            result = engine.submit_action(ExecutePlayer(player_id=president, target_id=hitler_id))
             assert result["hitler"] is True
             assert engine.is_game_over
             assert engine.result.winner == "liberal"
@@ -811,9 +780,7 @@ def test_execution_cannot_target_self() -> None:
     president = pa.required_by
 
     with pytest.raises(IllegalActionError, match="cannot execute themselves"):
-        engine.submit_action(
-            ExecutePlayer(player_id=president, target_id=president)
-        )
+        engine.submit_action(ExecutePlayer(player_id=president, target_id=president))
 
 
 # ──────────────────────────────────────────────────────────────
@@ -834,6 +801,4 @@ def test_special_election_cannot_target_self() -> None:
     president = pa.required_by
 
     with pytest.raises(IllegalActionError, match="cannot designate themselves"):
-        engine.submit_action(
-            SpecialElection(player_id=president, target_id=president)
-        )
+        engine.submit_action(SpecialElection(player_id=president, target_id=president))

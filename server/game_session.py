@@ -11,7 +11,6 @@ from game.types import (
     CastVote,
     ChancellorEnact,
     ExecutePlayer,
-    GameOverError,
     GamePhase,
     IllegalActionError,
     InvestigatePlayer,
@@ -21,11 +20,9 @@ from game.types import (
     SpecialElection,
     VetoResponse,
 )
-
 from server.auth import generate_player_tokens
 from server.game_logger import GameLogger
 from server.models import GameResultInfo, PendingActionInfo
-
 
 # ─── Action factory mapping ─────────────────────────────────────────────────
 
@@ -128,12 +125,14 @@ class GameSession:
         self._engine.setup()
         self._tokens = generate_player_tokens(self._engine.num_players)
 
-        self._logger.log_metadata({
-            "game_id": self.game_id,
-            "num_players": self._engine.num_players,
-            "skin": self._skin.name if self._skin else None,
-            "seed": self._seed,
-        })
+        self._logger.log_metadata(
+            {
+                "game_id": self.game_id,
+                "num_players": self._engine.num_players,
+                "skin": self._skin.name if self._skin else None,
+                "seed": self._seed,
+            },
+        )
 
         return dict(self._tokens)
 
@@ -207,21 +206,19 @@ class GameSession:
         # Open discussion windows at natural pauses
         phase = self._engine.phase
         if phase == GamePhase.ELECTION_VOTE and action_type == "nominate":
-            self._current_discussion = DiscussionWindow(
-                self._engine._round_number, "pre_vote"
-            )
+            self._current_discussion = DiscussionWindow(self._engine._round_number, "pre_vote")
         elif result.get("event") == "policy_enacted":
-            self._current_discussion = DiscussionWindow(
-                self._engine._round_number, "post_legislative"
-            )
+            self._current_discussion = DiscussionWindow(self._engine._round_number, "post_legislative")
 
         # Log game result if the game just ended
         if self._engine.is_game_over and self._engine.result:
-            self._logger.log_game_result({
-                "winner": self._engine.result.winner,
-                "condition": self._engine.result.condition.value,
-                "final_round": self._engine.result.final_round,
-            })
+            self._logger.log_game_result(
+                {
+                    "winner": self._engine.result.winner,
+                    "condition": self._engine.result.condition.value,
+                    "final_round": self._engine.result.final_round,
+                },
+            )
 
         return result
 
@@ -232,9 +229,7 @@ class GameSession:
         if self._current_discussion is None or not self._current_discussion.is_open:
             raise IllegalActionError("No discussion window is currently open.")
         entry = self._current_discussion.add_message(player_id, message)
-        self._logger.log_discussion(
-            player_id, self._current_discussion.window_type, message
-        )
+        self._logger.log_discussion(player_id, self._current_discussion.window_type, message)
         return entry
 
     def get_discussion(self) -> dict | None:

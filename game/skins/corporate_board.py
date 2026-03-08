@@ -67,54 +67,32 @@ class CorporateBoardSkin(BaseSkin):
     def phase_description(self, phase: GamePhase) -> str:
         return {
             GamePhase.GAME_SETUP: "The board meeting is being convened.",
-            GamePhase.CHANCELLOR_NOMINATION: (
-                "The Chairperson is nominating a CEO candidate."
-            ),
-            GamePhase.ELECTION_VOTE: (
-                "The board is voting on the proposed leadership."
-            ),
+            GamePhase.CHANCELLOR_NOMINATION: ("The Chairperson is nominating a CEO candidate."),
+            GamePhase.ELECTION_VOTE: ("The board is voting on the proposed leadership."),
             GamePhase.LEGISLATIVE_PRESIDENT: (
-                "The Chairperson is reviewing three decisions from the "
-                "pipeline and must archive one."
+                "The Chairperson is reviewing three decisions from the pipeline and must archive one."
             ),
             GamePhase.LEGISLATIVE_CHANCELLOR: (
-                "The CEO candidate is choosing which of the two remaining "
-                "decisions to enact."
+                "The CEO candidate is choosing which of the two remaining decisions to enact."
             ),
             GamePhase.VETO_RESPONSE: (
-                "The CEO candidate has proposed an override. "
-                "The Chairperson must consent or refuse."
+                "The CEO candidate has proposed an override. The Chairperson must consent or refuse."
             ),
-            GamePhase.EXECUTIVE_ACTION_INVESTIGATE: (
-                "The Chairperson is auditing another board member's portfolio."
-            ),
-            GamePhase.EXECUTIVE_ACTION_PEEK: (
-                "The Chairperson is reviewing the top three decisions in the pipeline."
-            ),
+            GamePhase.EXECUTIVE_ACTION_INVESTIGATE: ("The Chairperson is auditing another board member's portfolio."),
+            GamePhase.EXECUTIVE_ACTION_PEEK: ("The Chairperson is reviewing the top three decisions in the pipeline."),
             GamePhase.EXECUTIVE_ACTION_SPECIAL_ELECTION: (
-                "The Chairperson is calling an emergency session to select "
-                "the next Chairperson."
+                "The Chairperson is calling an emergency session to select the next Chairperson."
             ),
-            GamePhase.EXECUTIVE_ACTION_EXECUTION: (
-                "The Chairperson must terminate a board member."
-            ),
+            GamePhase.EXECUTIVE_ACTION_EXECUTION: ("The Chairperson must terminate a board member."),
             GamePhase.GAME_OVER: "The board meeting has concluded.",
         }[phase]
 
     def win_description(self, condition: WinCondition) -> str:
         return {
-            WinCondition.LIBERAL_POLICY_WIN: (
-                "5 Invest decisions enacted! The company thrives. Loyalists win!"
-            ),
-            WinCondition.LIBERAL_HITLER_EXECUTED: (
-                "The Ringleader has been terminated from the board! Loyalists win!"
-            ),
-            WinCondition.FASCIST_POLICY_WIN: (
-                "6 Divest decisions enacted! The stock price crashes. Infiltrators win!"
-            ),
-            WinCondition.FASCIST_HITLER_CHANCELLOR: (
-                "The Ringleader has become CEO! Infiltrators win!"
-            ),
+            WinCondition.LIBERAL_POLICY_WIN: ("5 Invest decisions enacted! The company thrives. Loyalists win!"),
+            WinCondition.LIBERAL_HITLER_EXECUTED: ("The Ringleader has been terminated from the board! Loyalists win!"),
+            WinCondition.FASCIST_POLICY_WIN: ("6 Divest decisions enacted! The stock price crashes. Infiltrators win!"),
+            WinCondition.FASCIST_HITLER_CHANCELLOR: ("The Ringleader has become CEO! Infiltrators win!"),
         }[condition]
 
     def game_premise(self) -> str:

@@ -10,21 +10,17 @@ from game.types import (
     CastVote,
     ChancellorEnact,
     ExecutePlayer,
-    ExecutivePower,
     GameOverError,
     GamePhase,
     IllegalActionError,
     InvestigatePlayer,
     NominateChancellor,
     PolicyPeekAck,
-    PolicyType,
     PresidentDiscard,
     Role,
     SpecialElection,
-    VetoResponse,
     WinCondition,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -40,24 +36,18 @@ def handle_executive_action(engine: GameEngine) -> None:
     if phase == GamePhase.EXECUTIVE_ACTION_INVESTIGATE:
         pending = engine.pending_action
         target = pending.legal_targets[0]
-        engine.submit_action(
-            InvestigatePlayer(player_id=pending.required_by, target_id=target)
-        )
+        engine.submit_action(InvestigatePlayer(player_id=pending.required_by, target_id=target))
     elif phase == GamePhase.EXECUTIVE_ACTION_PEEK:
         pending = engine.pending_action
         engine.submit_action(PolicyPeekAck(player_id=pending.required_by))
     elif phase == GamePhase.EXECUTIVE_ACTION_SPECIAL_ELECTION:
         pending = engine.pending_action
         target = pending.legal_targets[0]
-        engine.submit_action(
-            SpecialElection(player_id=pending.required_by, target_id=target)
-        )
+        engine.submit_action(SpecialElection(player_id=pending.required_by, target_id=target))
     elif phase == GamePhase.EXECUTIVE_ACTION_EXECUTION:
         pending = engine.pending_action
         target = pending.legal_targets[0]
-        engine.submit_action(
-            ExecutePlayer(player_id=pending.required_by, target_id=target)
-        )
+        engine.submit_action(ExecutePlayer(player_id=pending.required_by, target_id=target))
 
 
 def advance_round(
@@ -80,9 +70,7 @@ def advance_round(
 
     if chancellor_target is None:
         chancellor_target = pending.legal_targets[0]
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor_target)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
 
     # Vote
     if votes is None:
@@ -98,15 +86,11 @@ def advance_round(
 
     # Legislative session
     if engine.phase == GamePhase.LEGISLATIVE_PRESIDENT:
-        engine.submit_action(
-            PresidentDiscard(player_id=president, discard_index=president_discard)
-        )
+        engine.submit_action(PresidentDiscard(player_id=president, discard_index=president_discard))
     if engine.is_game_over:
         return
     if engine.phase == GamePhase.LEGISLATIVE_CHANCELLOR:
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor_target, enact_index=chancellor_enact)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=chancellor_enact))
 
     if engine.is_game_over:
         return
@@ -120,9 +104,7 @@ def fail_election(engine: GameEngine) -> None:
     pending = engine.pending_action
     president = pending.required_by
     chancellor_target = pending.legal_targets[0]
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor_target)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
     for pid in engine.living_players:
         engine.submit_action(CastVote(player_id=pid, vote=False))
 
@@ -192,7 +174,6 @@ def test_full_game_liberal_policy_win():
     engine = GameEngine(num_players=5, seed=42)
     engine.setup()
 
-    liberal_enacted = 0
     rounds = 0
     max_rounds = 100  # safety valve
 
@@ -210,9 +191,7 @@ def test_full_game_liberal_policy_win():
                     chancellor_target = alt
                     break
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
 
         # Everyone votes Ja
         for pid in engine.living_players:
@@ -233,9 +212,7 @@ def test_full_game_liberal_policy_win():
                 if p == "fascist":
                     discard_idx = i
                     break
-            engine.submit_action(
-                PresidentDiscard(player_id=president, discard_index=discard_idx)
-            )
+            engine.submit_action(PresidentDiscard(player_id=president, discard_index=discard_idx))
 
         if engine.is_game_over:
             break
@@ -249,9 +226,7 @@ def test_full_game_liberal_policy_win():
                 if p == "liberal":
                     enact_idx = i
                     break
-            engine.submit_action(
-                ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx)
-            )
+            engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx))
 
         if engine.is_game_over:
             break
@@ -292,9 +267,7 @@ def test_full_game_fascist_policy_win():
                     chancellor_target = alt
                     break
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
 
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
@@ -314,9 +287,7 @@ def test_full_game_fascist_policy_win():
                 if p == "liberal":
                     discard_idx = i
                     break
-            engine.submit_action(
-                PresidentDiscard(player_id=president, discard_index=discard_idx)
-            )
+            engine.submit_action(PresidentDiscard(player_id=president, discard_index=discard_idx))
 
         if engine.is_game_over:
             break
@@ -329,9 +300,7 @@ def test_full_game_fascist_policy_win():
                 if p == "fascist":
                     enact_idx = i
                     break
-            engine.submit_action(
-                ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx)
-            )
+            engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx))
 
         if engine.is_game_over:
             break
@@ -379,9 +348,7 @@ def test_full_game_hitler_executed():
                     chancellor_target = alt
                     break
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
 
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
@@ -400,9 +367,7 @@ def test_full_game_hitler_executed():
                 if p == "liberal":
                     discard_idx = i
                     break
-            engine.submit_action(
-                PresidentDiscard(player_id=president, discard_index=discard_idx)
-            )
+            engine.submit_action(PresidentDiscard(player_id=president, discard_index=discard_idx))
 
         if engine.is_game_over:
             break
@@ -415,9 +380,7 @@ def test_full_game_hitler_executed():
                 if p == "fascist":
                     enact_idx = i
                     break
-            engine.submit_action(
-                ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx)
-            )
+            engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx))
 
         if engine.is_game_over:
             break
@@ -427,11 +390,7 @@ def test_full_game_hitler_executed():
         if phase == GamePhase.EXECUTIVE_ACTION_EXECUTION:
             exec_pending = engine.pending_action
             if hitler_id in exec_pending.legal_targets:
-                engine.submit_action(
-                    ExecutePlayer(
-                        player_id=exec_pending.required_by, target_id=hitler_id
-                    )
-                )
+                engine.submit_action(ExecutePlayer(player_id=exec_pending.required_by, target_id=hitler_id))
                 break
             else:
                 # Hitler is not a legal target (is the president); pick someone else
@@ -439,7 +398,7 @@ def test_full_game_hitler_executed():
                     ExecutePlayer(
                         player_id=exec_pending.required_by,
                         target_id=exec_pending.legal_targets[0],
-                    )
+                    ),
                 )
         else:
             handle_executive_action(engine)
@@ -471,9 +430,7 @@ def test_full_game_hitler_elected_chancellor():
 
         # If 3+ fascist policies, try to elect Hitler
         if engine.fascist_policy_count >= 3 and hitler_id in pending.legal_targets:
-            engine.submit_action(
-                NominateChancellor(player_id=president, target_id=hitler_id)
-            )
+            engine.submit_action(NominateChancellor(player_id=president, target_id=hitler_id))
             for pid in engine.living_players:
                 engine.submit_action(CastVote(player_id=pid, vote=True))
             break
@@ -488,9 +445,7 @@ def test_full_game_hitler_elected_chancellor():
                     chancellor_target = alt
                     break
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
 
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
@@ -509,9 +464,7 @@ def test_full_game_hitler_elected_chancellor():
                 if p == "liberal":
                     discard_idx = i
                     break
-            engine.submit_action(
-                PresidentDiscard(player_id=president, discard_index=discard_idx)
-            )
+            engine.submit_action(PresidentDiscard(player_id=president, discard_index=discard_idx))
 
         if engine.is_game_over:
             break
@@ -524,9 +477,7 @@ def test_full_game_hitler_elected_chancellor():
                 if p == "fascist":
                     enact_idx = i
                     break
-            engine.submit_action(
-                ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx)
-            )
+            engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx))
 
         if engine.is_game_over:
             break
@@ -578,9 +529,7 @@ def test_hitler_chancellor_check_before_3_fascist():
     assert hitler_id in pending.legal_targets
 
     # Nominate Hitler
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=hitler_id)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=hitler_id))
 
     # Vote Ja
     for pid in engine.living_players:
@@ -634,9 +583,7 @@ def test_chaos_top_deck_at_3_rejections():
     fail_election(engine)
 
     # After 3 rejections: chaos should have enacted a policy
-    total_enacted = (engine.liberal_policy_count - lib_before) + (
-        engine.fascist_policy_count - fas_before
-    )
+    total_enacted = (engine.liberal_policy_count - lib_before) + (engine.fascist_policy_count - fas_before)
     assert total_enacted == 1
 
     # Tracker resets to 0
@@ -683,9 +630,7 @@ def test_chaos_ignores_executive_power():
                     chancellor_target = alt
                     break
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
 
@@ -707,9 +652,7 @@ def test_chaos_ignores_executive_power():
             if p == "liberal":
                 discard_idx = i
                 break
-        engine.submit_action(
-            PresidentDiscard(player_id=president, discard_index=discard_idx)
-        )
+        engine.submit_action(PresidentDiscard(player_id=president, discard_index=discard_idx))
         if engine.is_game_over:
             continue
 
@@ -720,9 +663,7 @@ def test_chaos_ignores_executive_power():
             if p == "fascist":
                 enact_idx = i
                 break
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx))
 
         if engine.is_game_over:
             continue
@@ -816,9 +757,7 @@ def test_presidential_rotation_skips_dead_players():
                     chancellor_target = alt
                     break
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
 
@@ -836,9 +775,7 @@ def test_presidential_rotation_skips_dead_players():
                 if p == "liberal":
                     discard_idx = i
                     break
-            engine.submit_action(
-                PresidentDiscard(player_id=president, discard_index=discard_idx)
-            )
+            engine.submit_action(PresidentDiscard(player_id=president, discard_index=discard_idx))
 
         if engine.is_game_over:
             break
@@ -851,9 +788,7 @@ def test_presidential_rotation_skips_dead_players():
                 if p == "fascist":
                     enact_idx = i
                     break
-            engine.submit_action(
-                ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx)
-            )
+            engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=enact_idx))
 
         if engine.is_game_over:
             break
@@ -871,9 +806,7 @@ def test_presidential_rotation_skips_dead_players():
                 target = exec_pending.legal_targets[0]
 
             executed_player = target
-            engine.submit_action(
-                ExecutePlayer(player_id=exec_pending.required_by, target_id=target)
-            )
+            engine.submit_action(ExecutePlayer(player_id=exec_pending.required_by, target_id=target))
 
             if engine.is_game_over:
                 break
@@ -915,9 +848,7 @@ def test_pending_action_correct_at_each_phase():
     president = pending.required_by
     chancellor_target = pending.legal_targets[0]
 
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor_target)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
 
     # Phase 2: ELECTION_VOTE
     pending = engine.pending_action
@@ -939,9 +870,7 @@ def test_pending_action_correct_at_each_phase():
     assert pending.required_by == president
     assert 0 in pending.legal_targets
 
-    engine.submit_action(
-        PresidentDiscard(player_id=president, discard_index=0)
-    )
+    engine.submit_action(PresidentDiscard(player_id=president, discard_index=0))
 
     # Phase 4: LEGISLATIVE_CHANCELLOR
     pending = engine.pending_action
@@ -950,9 +879,7 @@ def test_pending_action_correct_at_each_phase():
     assert pending.required_by == chancellor_target
     assert 0 in pending.legal_targets
 
-    engine.submit_action(
-        ChancellorEnact(player_id=chancellor_target, enact_index=0)
-    )
+    engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=0))
 
     # After enacting, should be either executive action or next nomination
     if not engine.is_game_over:
@@ -994,9 +921,7 @@ class TestIllegalActionRaises:
         wrong_player = [pid for pid in engine.living_players if pid != president][0]
 
         with pytest.raises(IllegalActionError):
-            engine.submit_action(
-                NominateChancellor(player_id=wrong_player, target_id=0)
-            )
+            engine.submit_action(NominateChancellor(player_id=wrong_player, target_id=0))
 
     def test_nominate_ineligible_player(self):
         """Nominate the president as chancellor (always ineligible)."""
@@ -1007,9 +932,7 @@ class TestIllegalActionRaises:
         president = pending.required_by
 
         with pytest.raises(IllegalActionError):
-            engine.submit_action(
-                NominateChancellor(player_id=president, target_id=president)
-            )
+            engine.submit_action(NominateChancellor(player_id=president, target_id=president))
 
     def test_wrong_player_for_discard(self):
         """A non-president tries to discard during legislative session."""
@@ -1020,17 +943,13 @@ class TestIllegalActionRaises:
         president = pending.required_by
         chancellor_target = pending.legal_targets[0]
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
 
         assert engine.phase == GamePhase.LEGISLATIVE_PRESIDENT
         with pytest.raises(IllegalActionError):
-            engine.submit_action(
-                PresidentDiscard(player_id=chancellor_target, discard_index=0)
-            )
+            engine.submit_action(PresidentDiscard(player_id=chancellor_target, discard_index=0))
 
     def test_wrong_player_for_enact(self):
         """A non-chancellor tries to enact during legislative session."""
@@ -1041,20 +960,14 @@ class TestIllegalActionRaises:
         president = pending.required_by
         chancellor_target = pending.legal_targets[0]
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
 
-        engine.submit_action(
-            PresidentDiscard(player_id=president, discard_index=0)
-        )
+        engine.submit_action(PresidentDiscard(player_id=president, discard_index=0))
         assert engine.phase == GamePhase.LEGISLATIVE_CHANCELLOR
         with pytest.raises(IllegalActionError):
-            engine.submit_action(
-                ChancellorEnact(player_id=president, enact_index=0)
-            )
+            engine.submit_action(ChancellorEnact(player_id=president, enact_index=0))
 
     def test_vote_during_nomination_phase(self):
         """Submit a vote when we are in nomination phase."""
@@ -1073,17 +986,13 @@ class TestIllegalActionRaises:
         president = pending.required_by
         chancellor_target = pending.legal_targets[0]
 
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor_target)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
 
         assert engine.phase == GamePhase.LEGISLATIVE_PRESIDENT
         with pytest.raises(IllegalActionError):
-            engine.submit_action(
-                PresidentDiscard(player_id=president, discard_index=5)
-            )
+            engine.submit_action(PresidentDiscard(player_id=president, discard_index=5))
 
     def test_action_before_setup(self):
         """Submit an action before calling setup()."""
@@ -1150,10 +1059,7 @@ def test_deterministic_with_same_seed():
             engine.liberal_policy_count,
             engine.fascist_policy_count,
             len(engine.round_history),
-            [
-                (r.round_number, r.elected, r.policy_enacted, r.chaos_policy)
-                for r in engine.round_history
-            ],
+            [(r.round_number, r.elected, r.policy_enacted, r.chaos_policy) for r in engine.round_history],
         )
 
     result_a = play_game(seed=12345)

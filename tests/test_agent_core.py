@@ -9,29 +9,26 @@ from dataclasses import FrozenInstanceError
 
 import httpx
 import pytest
-
-from agents.types import (
-    AgentConfig,
-    DEFAULT_MAX_TOKENS,
-    FALLBACK_CONTEXT_LENGTH,
-    ModelInfo,
-    ModelResponse,
-    ToolCall,
-    ToolDef,
-    ToolResult,
-)
+from agents.agent import Agent, RunResult
+from agents.middleware import Compactor, Context, Middleware, Transcript
 from agents.providers import (
     DiskStore,
     LocalTools,
     MemoryStore,
     OpenRouter,
     ToolSearch,
-    fetch_openrouter_model_info,
     _reset_model_info_cache,
+    fetch_openrouter_model_info,
 )
-from agents.middleware import Compactor, Context, Middleware, Transcript
-from agents.agent import Agent, RunResult
-
+from agents.types import (
+    DEFAULT_MAX_TOKENS,
+    AgentConfig,
+    ModelInfo,
+    ModelResponse,
+    ToolCall,
+    ToolDef,
+    ToolResult,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -384,7 +381,7 @@ class TestOpenRouter:
                 "id": "call_abc",
                 "type": "function",
                 "function": {"name": "my_tool", "arguments": '{"x": 1}'},
-            }
+            },
         ]
         payload = _make_openai_response(content=None, tool_calls=tc_payload)
         payload["choices"][0]["message"]["content"] = None
@@ -427,6 +424,7 @@ class TestOpenRouter:
 
         # Patch asyncio.sleep to avoid real delays
         import asyncio
+
         original_sleep = asyncio.sleep
 
         async def fast_sleep(seconds):
@@ -457,6 +455,7 @@ class TestOpenRouter:
         client._client = httpx.AsyncClient(transport=transport)
 
         import asyncio
+
         original_sleep = asyncio.sleep
 
         async def fast_sleep(seconds):
@@ -548,6 +547,7 @@ class TestOpenRouter:
         client._client = httpx.AsyncClient(transport=transport)
 
         import asyncio
+
         original_sleep = asyncio.sleep
 
         async def fast_sleep(seconds):
@@ -593,7 +593,7 @@ class TestFetchModelInfo:
                 "top_provider": {},
                 "pricing": {},
             },
-        ]
+        ],
     }
 
     @pytest.fixture(autouse=True)
@@ -1128,10 +1128,12 @@ class TestAgent:
         tool_def = ToolDef(name="greet", description="Greet someone")
         mock_tools = MockTools(defs=[tool_def], results={"greet": "Greeted!"})
 
-        model = MockModel([
-            _tool_call_response("greet", {"name": "Alice"}),
-            _text_response("Done greeting Alice"),
-        ])
+        model = MockModel(
+            [
+                _tool_call_response("greet", {"name": "Alice"}),
+                _text_response("Done greeting Alice"),
+            ],
+        )
         agent = Agent(model=model, tools=[mock_tools])
         result = await agent.run("Greet Alice")
 
@@ -1150,11 +1152,13 @@ class TestAgent:
             results={"tool_a": "result_a", "tool_b": "result_b"},
         )
 
-        model = MockModel([
-            _tool_call_response("tool_a", {}, call_id="c1"),
-            _tool_call_response("tool_b", {}, call_id="c2"),
-            _text_response("All done"),
-        ])
+        model = MockModel(
+            [
+                _tool_call_response("tool_a", {}, call_id="c1"),
+                _tool_call_response("tool_b", {}, call_id="c2"),
+                _text_response("All done"),
+            ],
+        )
         agent = Agent(model=model, tools=[mock_tools])
         result = await agent.run("Do both")
 
@@ -1168,10 +1172,7 @@ class TestAgent:
         mock_tools = MockTools(defs=[tool_def], results={"loop": "looped"})
 
         # Model always calls tool — never finishes
-        responses = [
-            _tool_call_response("loop", {}, call_id=f"c{i}")
-            for i in range(5)
-        ]
+        responses = [_tool_call_response("loop", {}, call_id=f"c{i}") for i in range(5)]
         model = MockModel(responses)
         agent = Agent(model=model, tools=[mock_tools])
         result = await agent.run("loop forever", max_turns=3)
@@ -1182,10 +1183,12 @@ class TestAgent:
 
     @pytest.mark.asyncio
     async def test_persistent_conversation(self):
-        model = MockModel([
-            _text_response("First reply"),
-            _text_response("Second reply"),
-        ])
+        model = MockModel(
+            [
+                _text_response("First reply"),
+                _text_response("Second reply"),
+            ],
+        )
         agent = Agent(model=model, system_prompt="You are helpful")
 
         r1 = await agent.run("Message 1")
@@ -1203,10 +1206,12 @@ class TestAgent:
 
     @pytest.mark.asyncio
     async def test_system_prompt_not_duplicated(self):
-        model = MockModel([
-            _text_response("r1"),
-            _text_response("r2"),
-        ])
+        model = MockModel(
+            [
+                _text_response("r1"),
+                _text_response("r2"),
+            ],
+        )
         agent = Agent(model=model, system_prompt="sys prompt")
 
         await agent.run("m1")
@@ -1221,11 +1226,13 @@ class TestAgent:
         tool_def = ToolDef(name="submit_action", description="Submit game action")
         mock_tools = MockTools(defs=[tool_def], results={"submit_action": "submitted"})
 
-        model = MockModel([
-            _tool_call_response("submit_action", {"action": "vote_yes"}, call_id="c1"),
-            # This response should NOT be consumed
-            _text_response("should not reach here"),
-        ])
+        model = MockModel(
+            [
+                _tool_call_response("submit_action", {"action": "vote_yes"}, call_id="c1"),
+                # This response should NOT be consumed
+                _text_response("should not reach here"),
+            ],
+        )
         agent = Agent(model=model, tools=[mock_tools])
         result = await agent.run("Do action")
 
@@ -1240,10 +1247,12 @@ class TestAgent:
         tool_def = ToolDef(name="my_tool", description="A tool")
         mock_tools = MockTools(defs=[tool_def], results={"my_tool": "ok"})
 
-        model = MockModel([
-            _tool_call_response("my_tool", {}, call_id="c1"),
-            _text_response("done"),
-        ])
+        model = MockModel(
+            [
+                _tool_call_response("my_tool", {}, call_id="c1"),
+                _text_response("done"),
+            ],
+        )
         agent = Agent(model=model, tools=[mock_tools], middleware=[spy])
         await agent.run("do it")
 
@@ -1281,11 +1290,13 @@ class TestAgent:
         provider_a = MockTools(defs=[tool_a], results={"tool_a": "from_a"})
         provider_b = MockTools(defs=[tool_b], results={"tool_b": "from_b"})
 
-        model = MockModel([
-            _tool_call_response("tool_a", {}, call_id="c1"),
-            _tool_call_response("tool_b", {}, call_id="c2"),
-            _text_response("all done"),
-        ])
+        model = MockModel(
+            [
+                _tool_call_response("tool_a", {}, call_id="c1"),
+                _tool_call_response("tool_b", {}, call_id="c2"),
+                _text_response("all done"),
+            ],
+        )
         agent = Agent(model=model, tools=[provider_a, provider_b])
         result = await agent.run("use both tools")
 
@@ -1294,10 +1305,12 @@ class TestAgent:
 
     @pytest.mark.asyncio
     async def test_unknown_tool_returns_error(self):
-        model = MockModel([
-            _tool_call_response("nonexistent_tool", {}, call_id="c1"),
-            _text_response("recovered"),
-        ])
+        model = MockModel(
+            [
+                _tool_call_response("nonexistent_tool", {}, call_id="c1"),
+                _text_response("recovered"),
+            ],
+        )
         agent = Agent(model=model)
         result = await agent.run("try missing tool")
 
@@ -1372,22 +1385,31 @@ class TestAgentResolution:
         config = AgentConfig(max_tokens=None)
         session = AgentSession(
             agent_config=config,
-            game_id="test", player_id=0, token="tok",
+            game_id="test",
+            player_id=0,
+            token="tok",
             server_url="http://localhost:8000",
-            skin="secret_hitler", role="liberal", num_players=5,
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         session._system_prompt = "test"
 
         mock_info = ModelInfo(
-            model_id="test/model", context_length=200000,
-            max_completion_tokens=8192, supported_parameters=(),
-            pricing_prompt=0, pricing_completion=0,
+            model_id="test/model",
+            context_length=200000,
+            max_completion_tokens=8192,
+            supported_parameters=(),
+            pricing_prompt=0,
+            pricing_completion=0,
         )
 
-        with unittest.mock.patch("agents.providers.fetch_openrouter_model_info",
-                                  new_callable=unittest.mock.AsyncMock, return_value=mock_info):
-            with unittest.mock.patch("agents.providers.McpTools.open",
-                                      new_callable=unittest.mock.AsyncMock):
+        with unittest.mock.patch(
+            "agents.providers.fetch_openrouter_model_info",
+            new_callable=unittest.mock.AsyncMock,
+            return_value=mock_info,
+        ):
+            with unittest.mock.patch("agents.providers.McpTools.open", new_callable=unittest.mock.AsyncMock):
                 agent = await session._build_agent()
 
         assert agent._model._max_tokens == 8192
@@ -1400,16 +1422,22 @@ class TestAgentResolution:
         config = AgentConfig(max_tokens=None)
         session = AgentSession(
             agent_config=config,
-            game_id="test", player_id=0, token="tok",
+            game_id="test",
+            player_id=0,
+            token="tok",
             server_url="http://localhost:8000",
-            skin="secret_hitler", role="liberal", num_players=5,
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         session._system_prompt = "test"
 
-        with unittest.mock.patch("agents.providers.fetch_openrouter_model_info",
-                                  new_callable=unittest.mock.AsyncMock, return_value=None):
-            with unittest.mock.patch("agents.providers.McpTools.open",
-                                      new_callable=unittest.mock.AsyncMock):
+        with unittest.mock.patch(
+            "agents.providers.fetch_openrouter_model_info",
+            new_callable=unittest.mock.AsyncMock,
+            return_value=None,
+        ):
+            with unittest.mock.patch("agents.providers.McpTools.open", new_callable=unittest.mock.AsyncMock):
                 agent = await session._build_agent()
 
         assert agent._model._max_tokens == DEFAULT_MAX_TOKENS
@@ -1422,22 +1450,31 @@ class TestAgentResolution:
         config = AgentConfig(max_tokens=2048)
         session = AgentSession(
             agent_config=config,
-            game_id="test", player_id=0, token="tok",
+            game_id="test",
+            player_id=0,
+            token="tok",
             server_url="http://localhost:8000",
-            skin="secret_hitler", role="liberal", num_players=5,
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         session._system_prompt = "test"
 
         mock_info = ModelInfo(
-            model_id="test/model", context_length=200000,
-            max_completion_tokens=8192, supported_parameters=(),
-            pricing_prompt=0, pricing_completion=0,
+            model_id="test/model",
+            context_length=200000,
+            max_completion_tokens=8192,
+            supported_parameters=(),
+            pricing_prompt=0,
+            pricing_completion=0,
         )
 
-        with unittest.mock.patch("agents.providers.fetch_openrouter_model_info",
-                                  new_callable=unittest.mock.AsyncMock, return_value=mock_info):
-            with unittest.mock.patch("agents.providers.McpTools.open",
-                                      new_callable=unittest.mock.AsyncMock):
+        with unittest.mock.patch(
+            "agents.providers.fetch_openrouter_model_info",
+            new_callable=unittest.mock.AsyncMock,
+            return_value=mock_info,
+        ):
+            with unittest.mock.patch("agents.providers.McpTools.open", new_callable=unittest.mock.AsyncMock):
                 agent = await session._build_agent()
 
         assert agent._model._max_tokens == 2048
@@ -1450,22 +1487,31 @@ class TestAgentResolution:
         config = AgentConfig(compaction_threshold=None, compaction_ratio=0.75)
         session = AgentSession(
             agent_config=config,
-            game_id="test", player_id=0, token="tok",
+            game_id="test",
+            player_id=0,
+            token="tok",
             server_url="http://localhost:8000",
-            skin="secret_hitler", role="liberal", num_players=5,
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         session._system_prompt = "test"
 
         mock_info = ModelInfo(
-            model_id="test/model", context_length=200000,
-            max_completion_tokens=8192, supported_parameters=(),
-            pricing_prompt=0, pricing_completion=0,
+            model_id="test/model",
+            context_length=200000,
+            max_completion_tokens=8192,
+            supported_parameters=(),
+            pricing_prompt=0,
+            pricing_completion=0,
         )
 
-        with unittest.mock.patch("agents.providers.fetch_openrouter_model_info",
-                                  new_callable=unittest.mock.AsyncMock, return_value=mock_info):
-            with unittest.mock.patch("agents.providers.McpTools.open",
-                                      new_callable=unittest.mock.AsyncMock):
+        with unittest.mock.patch(
+            "agents.providers.fetch_openrouter_model_info",
+            new_callable=unittest.mock.AsyncMock,
+            return_value=mock_info,
+        ):
+            with unittest.mock.patch("agents.providers.McpTools.open", new_callable=unittest.mock.AsyncMock):
                 agent = await session._build_agent()
 
         # Compactor is second middleware (index 1)
@@ -1480,22 +1526,31 @@ class TestAgentResolution:
         config = AgentConfig(compaction_threshold=15000)
         session = AgentSession(
             agent_config=config,
-            game_id="test", player_id=0, token="tok",
+            game_id="test",
+            player_id=0,
+            token="tok",
             server_url="http://localhost:8000",
-            skin="secret_hitler", role="liberal", num_players=5,
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         session._system_prompt = "test"
 
         mock_info = ModelInfo(
-            model_id="test/model", context_length=200000,
-            max_completion_tokens=8192, supported_parameters=(),
-            pricing_prompt=0, pricing_completion=0,
+            model_id="test/model",
+            context_length=200000,
+            max_completion_tokens=8192,
+            supported_parameters=(),
+            pricing_prompt=0,
+            pricing_completion=0,
         )
 
-        with unittest.mock.patch("agents.providers.fetch_openrouter_model_info",
-                                  new_callable=unittest.mock.AsyncMock, return_value=mock_info):
-            with unittest.mock.patch("agents.providers.McpTools.open",
-                                      new_callable=unittest.mock.AsyncMock):
+        with unittest.mock.patch(
+            "agents.providers.fetch_openrouter_model_info",
+            new_callable=unittest.mock.AsyncMock,
+            return_value=mock_info,
+        ):
+            with unittest.mock.patch("agents.providers.McpTools.open", new_callable=unittest.mock.AsyncMock):
                 agent = await session._build_agent()
 
         compactor = agent._middleware[1]

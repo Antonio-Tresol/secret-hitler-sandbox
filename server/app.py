@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-import contextlib
-import hashlib
 import json
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from mcp.server import Server as McpServer
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.types import TextContent, Tool
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response as StarletteResponse
-from starlette.routing import Mount, Route
 from starlette.types import Receive, Scope, Send
 
 from game.skins import SKIN_REGISTRY
@@ -202,6 +198,7 @@ def discussion(game_id: str, authorization: str | None = Header(default=None)) -
 
 # ─── MCP streamable-http ─────────────────────────────────────────────────────
 
+
 def _create_mcp_server(session: GameSession, player_id: int) -> McpServer:
     """Create a per-connection MCP server with tools bound to a specific player."""
     mcp = McpServer(f"sh-player-{player_id}")
@@ -216,7 +213,10 @@ def _create_mcp_server(session: GameSession, player_id: int) -> McpServer:
         return [
             Tool(
                 name="get_game_status",
-                description="Get the current game status. Returns only changed fields by default (diff mode). Pass full=true for complete state.",
+                description=(
+                    "Get the current game status. Returns only changed fields"
+                    " by default (diff mode). Pass full=true for complete state."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {"full": _full_schema},
@@ -224,7 +224,10 @@ def _create_mcp_server(session: GameSession, player_id: int) -> McpServer:
             ),
             Tool(
                 name="get_observation",
-                description="Get your observation of the game state. Returns only changed fields by default (diff mode). Pass full=true for complete state.",
+                description=(
+                    "Get your observation of the game state. Returns only changed"
+                    " fields by default (diff mode). Pass full=true for complete state."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {"full": _full_schema},
@@ -238,11 +241,15 @@ def _create_mcp_server(session: GameSession, player_id: int) -> McpServer:
                     "properties": {
                         "action_type": {
                             "type": "string",
-                            "description": "Action type: nominate, vote, president_discard, chancellor_enact, veto_response, investigate, peek_ack, special_election, execute",
+                            "description": (
+                                "Action type: nominate, vote, president_discard,"
+                                " chancellor_enact, veto_response, investigate,"
+                                " peek_ack, special_election, execute"
+                            ),
                         },
                         "payload": {
                             "type": "object",
-                            "description": "Action payload object (e.g. {\"target_id\": 2})",
+                            "description": 'Action payload object (e.g. {"target_id": 2})',
                         },
                     },
                     "required": ["action_type", "payload"],
@@ -261,7 +268,10 @@ def _create_mcp_server(session: GameSession, player_id: int) -> McpServer:
             ),
             Tool(
                 name="get_discussion",
-                description="Get current discussion messages. Returns only new messages by default (diff mode). Pass full=true for all messages.",
+                description=(
+                    "Get current discussion messages. Returns only new messages"
+                    " by default (diff mode). Pass full=true for all messages."
+                ),
                 inputSchema={
                     "type": "object",
                     "properties": {"full": _full_schema},
@@ -336,9 +346,7 @@ def _dict_diff(old: dict, new: dict) -> dict:
 # ─── Per-tool MCP handlers ──────────────────────────────────────────────────
 
 
-def _handle_get_status(
-    session: GameSession, player_id: int, arguments: dict, cache: DiffCache
-) -> list[TextContent]:
+def _handle_get_status(session: GameSession, player_id: int, arguments: dict, cache: DiffCache) -> list[TextContent]:
     status = session.get_status()
     key = (session.game_id, player_id)
     want_full = arguments.get("full", False)
@@ -348,17 +356,25 @@ def _handle_get_status(
         diff = _dict_diff(prev, status)
         always_keys = {k for k in ("phase", "round", "is_game_over") if k in status}
         if set(diff.keys()) == always_keys:
-            return [TextContent(type="text", text=json.dumps(
-                NoChangeResponse(phase=status.get("phase"), round=status.get("round")).to_dict(),
-                default=str,
-            ))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        NoChangeResponse(phase=status.get("phase"), round=status.get("round")).to_dict(),
+                        default=str,
+                    ),
+                ),
+            ]
         diff["_diff"] = True
         return [TextContent(type="text", text=json.dumps(diff, default=str))]
     return [TextContent(type="text", text=json.dumps(status, default=str))]
 
 
 def _handle_get_observation(
-    session: GameSession, player_id: int, arguments: dict, cache: DiffCache
+    session: GameSession,
+    player_id: int,
+    arguments: dict,
+    cache: DiffCache,
 ) -> list[TextContent]:
     obs = session.get_observation(player_id)
     key = (session.game_id, player_id)
@@ -370,10 +386,15 @@ def _handle_get_observation(
         new_raw = obs.get("raw", {})
         diff_raw = _dict_diff(old_raw, new_raw)
         if diff_raw == {k: new_raw[k] for k in ("phase", "round", "is_game_over") if k in new_raw}:
-            return [TextContent(type="text", text=json.dumps(
-                NoChangeResponse(phase=new_raw.get("phase"), round=new_raw.get("round")).to_dict(),
-                default=str,
-            ))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        NoChangeResponse(phase=new_raw.get("phase"), round=new_raw.get("round")).to_dict(),
+                        default=str,
+                    ),
+                ),
+            ]
         result = {"_diff": True, "raw": diff_raw}
         if "skinned" in obs and "skinned" in prev:
             result["skinned"] = _dict_diff(prev["skinned"], obs["skinned"])
@@ -381,9 +402,7 @@ def _handle_get_observation(
     return [TextContent(type="text", text=json.dumps(obs, default=str))]
 
 
-def _handle_submit_action(
-    session: GameSession, player_id: int, arguments: dict, cache: DiffCache
-) -> list[TextContent]:
+def _handle_submit_action(session: GameSession, player_id: int, arguments: dict, cache: DiffCache) -> list[TextContent]:
     action_type = arguments["action_type"]
     payload = arguments.get("payload", {})
     try:
@@ -394,9 +413,7 @@ def _handle_submit_action(
     return [TextContent(type="text", text=json.dumps(result, default=str))]
 
 
-def _handle_speak(
-    session: GameSession, player_id: int, arguments: dict
-) -> list[TextContent]:
+def _handle_speak(session: GameSession, player_id: int, arguments: dict) -> list[TextContent]:
     message = arguments["message"]
     try:
         entry = session.speak(player_id, message)
@@ -406,7 +423,10 @@ def _handle_speak(
 
 
 def _handle_get_discussion(
-    session: GameSession, player_id: int, arguments: dict, cache: DiffCache
+    session: GameSession,
+    player_id: int,
+    arguments: dict,
+    cache: DiffCache,
 ) -> list[TextContent]:
     disc = session.get_discussion()
     if disc is None:
@@ -419,17 +439,29 @@ def _handle_get_discussion(
     if not want_full and prev_count > 0:
         new_msgs = msgs[prev_count:]
         if not new_msgs:
-            return [TextContent(type="text", text=json.dumps(
-                NoChangeResponse(message_count=len(msgs)).to_dict(),
-            ))]
-        return [TextContent(type="text", text=json.dumps({
-            "_diff": True,
-            "round": disc["round"],
-            "window": disc["window"],
-            "is_open": disc["is_open"],
-            "new_messages": new_msgs,
-            "total_count": len(msgs),
-        }))]
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(
+                        NoChangeResponse(message_count=len(msgs)).to_dict(),
+                    ),
+                ),
+            ]
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(
+                    {
+                        "_diff": True,
+                        "round": disc["round"],
+                        "window": disc["window"],
+                        "is_open": disc["is_open"],
+                        "new_messages": new_msgs,
+                        "total_count": len(msgs),
+                    },
+                ),
+            ),
+        ]
     return [TextContent(type="text", text=json.dumps(disc))]
 
 
@@ -444,9 +476,7 @@ _MCP_HANDLERS: dict[str, Any] = {
 }
 
 
-def _handle_mcp_tool(
-    session: GameSession, player_id: int, name: str, arguments: dict
-) -> list[TextContent]:
+def _handle_mcp_tool(session: GameSession, player_id: int, name: str, arguments: dict) -> list[TextContent]:
     """Handle an MCP tool call. Separated for unit-testing."""
     handler = _MCP_HANDLERS.get(name)
     if handler is None:
@@ -487,7 +517,9 @@ async def _handle_mcp_http(scope: Scope, receive: Receive, send: Send) -> None:
     # With stateless=True each request is self-contained.
     mcp = _create_mcp_server(session, player_id)
     manager = StreamableHTTPSessionManager(
-        app=mcp, stateless=True, json_response=True,
+        app=mcp,
+        stateless=True,
+        json_response=True,
     )
     async with manager.run():
         await manager.handle_request(scope, receive, send)

@@ -9,11 +9,10 @@ from pathlib import Path
 import pytest
 
 from game.skins.secret_hitler import SecretHitlerSkin
-from game.types import GamePhase, IllegalActionError
+from game.types import IllegalActionError
 from server.auth import generate_player_tokens
 from server.game_logger import GameLogger
 from server.game_session import DiscussionWindow, GameSession
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -161,9 +160,7 @@ class TestGameSessionBasic:
             status = session.get_status()
             president = status["pending_action"]["required_by"]
             targets = status["pending_action"]["legal_targets"]
-            result = session.submit_action(
-                president, "nominate", {"target_id": targets[0]}
-            )
+            result = session.submit_action(president, "nominate", {"target_id": targets[0]})
             assert result["event"] == "chancellor_nominated"
 
 
@@ -248,7 +245,7 @@ class TestMultiSession:
             s1 = GameSession(num_players=5, seed=42, log_base_dir=tmp)
             t1 = s1.setup()
             s2 = GameSession(num_players=5, seed=99, log_base_dir=tmp)
-            t2 = s2.setup()
+            s2.setup()
             # Tokens from one session should not work in the other
             token_from_s1 = next(iter(t1))
             with pytest.raises(ValueError):

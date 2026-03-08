@@ -18,11 +18,9 @@ from game.types import (
     InvestigatePlayer,
     NominateChancellor,
     PolicyPeekAck,
-    PolicyType,
     PresidentDiscard,
     Role,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -144,6 +142,7 @@ def _handle_executive_action_if_needed(engine: GameEngine) -> None:
         president = engine.current_president
         target = engine.pending_action.legal_targets[0]
         from game.types import SpecialElection
+
         engine.submit_action(SpecialElection(player_id=president, target_id=target))
     elif engine.phase == GamePhase.EXECUTIVE_ACTION_EXECUTION:
         president = engine.current_president
@@ -334,9 +333,7 @@ def test_non_president_cannot_see_drawn_policies():
         if pid == president:
             continue
         obs = engine.get_observation(pid)
-        assert "drawn_policies" not in obs, (
-            f"Player {pid} (not president) should not see drawn_policies"
-        )
+        assert "drawn_policies" not in obs, f"Player {pid} (not president) should not see drawn_policies"
 
     # Also verify during LEGISLATIVE_CHANCELLOR that non-chancellor cannot
     # see received_policies
@@ -347,9 +344,7 @@ def test_non_president_cannot_see_drawn_policies():
         if pid == chancellor:
             continue
         obs = engine.get_observation(pid)
-        assert "received_policies" not in obs, (
-            f"Player {pid} (not chancellor) should not see received_policies"
-        )
+        assert "received_policies" not in obs, f"Player {pid} (not chancellor) should not see received_policies"
 
 
 # ---------------------------------------------------------------------------
@@ -379,18 +374,12 @@ def test_investigation_result_only_for_president():
     for pid in range(engine.num_players):
         obs = engine.get_observation(pid)
         if pid == investigating_president:
-            assert "investigation_result" in obs, (
-                f"Investigating president {pid} should see investigation_result"
-            )
+            assert "investigation_result" in obs, f"Investigating president {pid} should see investigation_result"
             # Also check private_history
-            inv_events = [
-                e for e in obs["private_history"] if e["type"] == "investigation"
-            ]
+            inv_events = [e for e in obs["private_history"] if e["type"] == "investigation"]
             assert len(inv_events) >= 1
         else:
-            assert "investigation_result" not in obs, (
-                f"Player {pid} should not see investigation_result"
-            )
+            assert "investigation_result" not in obs, f"Player {pid} should not see investigation_result"
 
 
 def _drive_to_investigation(engine: GameEngine) -> int | None:
@@ -407,9 +396,7 @@ def _drive_to_investigation(engine: GameEngine) -> int | None:
         if engine.phase == GamePhase.EXECUTIVE_ACTION_INVESTIGATE:
             president = engine.current_president
             target = engine.pending_action.legal_targets[0]
-            engine.submit_action(
-                InvestigatePlayer(player_id=president, target_id=target)
-            )
+            engine.submit_action(InvestigatePlayer(player_id=president, target_id=target))
             return president
 
         if engine.phase == GamePhase.CHANCELLOR_NOMINATION:
@@ -424,9 +411,7 @@ def _drive_to_investigation(engine: GameEngine) -> int | None:
                 if engine.phase == GamePhase.EXECUTIVE_ACTION_INVESTIGATE:
                     president = engine.current_president
                     target = engine.pending_action.legal_targets[0]
-                    engine.submit_action(
-                        InvestigatePlayer(player_id=president, target_id=target)
-                    )
+                    engine.submit_action(InvestigatePlayer(player_id=president, target_id=target))
                     return president
 
                 _handle_executive_action_if_needed(engine)
@@ -458,19 +443,11 @@ def test_peek_result_only_for_president():
     for pid in range(engine.num_players):
         obs = engine.get_observation(pid)
         if pid == peeking_president:
-            peek_events = [
-                e for e in obs["private_history"] if e["type"] == "policy_peek"
-            ]
-            assert len(peek_events) >= 1, (
-                f"Peeking president {pid} should have peek event in private_history"
-            )
+            peek_events = [e for e in obs["private_history"] if e["type"] == "policy_peek"]
+            assert len(peek_events) >= 1, f"Peeking president {pid} should have peek event in private_history"
         else:
-            peek_events = [
-                e for e in obs["private_history"] if e["type"] == "policy_peek"
-            ]
-            assert len(peek_events) == 0, (
-                f"Player {pid} should NOT have peek event in private_history"
-            )
+            peek_events = [e for e in obs["private_history"] if e["type"] == "policy_peek"]
+            assert len(peek_events) == 0, f"Player {pid} should NOT have peek event in private_history"
 
 
 def _drive_to_peek(engine: GameEngine) -> int | None:
@@ -491,9 +468,7 @@ def _drive_to_peek(engine: GameEngine) -> int | None:
                 if pid == president:
                     assert "peeked_policies" in obs
                 else:
-                    assert "peeked_policies" not in obs, (
-                        f"Player {pid} should not see peeked_policies"
-                    )
+                    assert "peeked_policies" not in obs, f"Player {pid} should not see peeked_policies"
             engine.submit_action(PolicyPeekAck(player_id=president))
             return president
 
@@ -547,8 +522,7 @@ def test_confirmed_not_hitler_is_public():
 
         assert player_entry is not None
         assert player_entry["confirmed_not_hitler"] is True, (
-            f"Player {pid}'s view of player {confirmed_player} should show "
-            f"confirmed_not_hitler=True"
+            f"Player {pid}'s view of player {confirmed_player} should show confirmed_not_hitler=True"
         )
 
 
@@ -583,9 +557,7 @@ def _drive_to_confirmed_not_hitler(engine: GameEngine) -> int | None:
                 continue
 
             nominee = non_hitler_eligible[0]
-            engine.submit_action(
-                NominateChancellor(player_id=president, target_id=nominee)
-            )
+            engine.submit_action(NominateChancellor(player_id=president, target_id=nominee))
 
             # Everyone votes Ja
             for pid in engine.living_players:
@@ -645,9 +617,7 @@ def test_executed_player_role_not_revealed():
 
         # The player entries should not contain a 'role' field
         for p in obs["players"]:
-            assert "role" not in p, (
-                f"Player {pid}'s observation reveals role of player {p['id']}"
-            )
+            assert "role" not in p, f"Player {pid}'s observation reveals role of player {p['id']}"
 
         # Check that history entries do not contain target role info
         for h in obs["history"]:
@@ -730,9 +700,7 @@ def test_private_history_accumulates():
         president = engine.current_president
         pending = engine.pending_action
         nominee = pending.legal_targets[0]
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=nominee)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=nominee))
 
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=True))
@@ -757,18 +725,12 @@ def test_private_history_accumulates():
         # (could have more from executive actions like investigation/peek)
         actual_count = len(obs["private_history"])
         assert actual_count >= expected_count, (
-            f"Player {pid} expected >= {expected_count} private events, "
-            f"got {actual_count}"
+            f"Player {pid} expected >= {expected_count} private events, got {actual_count}"
         )
 
     # Verify at least one player accumulated multiple events
-    max_events = max(
-        len(engine.get_observation(pid)["private_history"])
-        for pid in range(engine.num_players)
-    )
-    assert max_events >= 2, (
-        "Expected at least one player to have 2+ private history events"
-    )
+    max_events = max(len(engine.get_observation(pid)["private_history"]) for pid in range(engine.num_players))
+    assert max_events >= 2, "Expected at least one player to have 2+ private history events"
 
 
 # ---------------------------------------------------------------------------
@@ -802,7 +764,7 @@ def test_observation_does_not_leak_deck_contents():
         assert "discard_pile_contents" not in obs
 
         # Recursively check that no nested structure leaks the full deck
-        obs_str = str(obs)
+        str(obs)
         # The draw pile has 14 cards after drawing 3, and the observation
         # should not contain a list representation of 14+ policy values
         # that corresponds to deck contents.
@@ -822,9 +784,7 @@ def test_votes_are_public_after_resolution():
     president = engine.current_president
     pending = engine.pending_action
     nominee = pending.legal_targets[0]
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=nominee)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=nominee))
 
     # Have a mixed vote: first 4 vote Ja, rest vote Nein
     living = engine.living_players
@@ -851,9 +811,7 @@ def test_votes_are_public_after_resolution():
             votes = last_voted["votes"]
 
             # All living players should have voted
-            assert len(votes) == len(living), (
-                f"Player {pid} sees {len(votes)} votes, expected {len(living)}"
-            )
+            assert len(votes) == len(living), f"Player {pid} sees {len(votes)} votes, expected {len(living)}"
 
             # Each vote should be a boolean
             for voter_id, vote in votes.items():
@@ -872,9 +830,7 @@ def test_votes_are_public_after_failed_election():
     president = engine.current_president
     pending = engine.pending_action
     nominee = pending.legal_targets[0]
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=nominee)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=nominee))
 
     # Everyone votes Nein so the election fails
     living = engine.living_players
@@ -894,10 +850,7 @@ def test_votes_are_public_after_failed_election():
 
         # All votes should be Nein (False)
         for voter_id, vote in last_round["votes"].items():
-            assert vote is False, (
-                f"Player {pid}'s history shows vote={vote} for voter {voter_id}, "
-                f"expected False"
-            )
+            assert vote is False, f"Player {pid}'s history shows vote={vote} for voter {voter_id}, expected False"
 
 
 # ---------------------------------------------------------------------------
@@ -1017,6 +970,5 @@ def test_investigation_result_not_in_history_for_others():
         for h in obs["history"]:
             # The public history should NOT contain investigation_result
             assert "investigation_result" not in h, (
-                f"Player {pid}'s history round {h.get('round')} leaks "
-                f"investigation_result"
+                f"Player {pid}'s history round {h.get('round')} leaks investigation_result"
             )

@@ -7,7 +7,6 @@ import pytest
 from game.policies import PolicyDeck
 from game.types import PolicyType
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -113,7 +112,7 @@ def test_reshuffle_when_below_3():
     # Simulate legislative sessions: draw 3, enact 1, discard 2 until < 3 remain.
     while deck.draw_size >= 3:
         hand = deck.draw(3)
-        enacted.append(hand[0])       # "enact" the first tile
+        enacted.append(hand[0])  # "enact" the first tile
         deck.discard(hand[1], hand[2])  # discard the other two
 
     assert deck.draw_size < 3  # precondition for reshuffle
@@ -271,6 +270,7 @@ def test_different_seeds_produce_different_order():
 def test_deterministic_reshuffle_with_seed():
     """After a reshuffle, a deck with the same seed and same operations produces
     the same order again."""
+
     def _simulate(seed: int) -> list[PolicyType]:
         deck = PolicyDeck(rng=random.Random(seed))
         # Draw and discard to trigger a reshuffle.

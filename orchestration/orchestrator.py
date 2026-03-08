@@ -19,10 +19,10 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from agents.types import AgentConfig
 from dotenv import load_dotenv
 
 from orchestration.backends import BasePlayerSession, create_session, parse_model_spec
-from agents.types import AgentConfig
 
 # ─── Bot player (random-action, for testing) ────────────────────────────────
 
@@ -141,6 +141,7 @@ class GameOrchestrator:
         num_players: int = 5,
         skin: str = "secret_hitler",
         seed: int | None = None,
+        *,
         bot_mode: bool = False,
         discussion_rounds: int = 2,
         poll_interval: float = 0.5,

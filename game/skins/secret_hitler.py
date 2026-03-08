@@ -50,47 +50,27 @@ class SecretHitlerSkin(BaseSkin):
     def phase_description(self, phase: GamePhase) -> str:
         return {
             GamePhase.GAME_SETUP: "The game is being set up.",
-            GamePhase.CHANCELLOR_NOMINATION: (
-                "The President is nominating a Chancellor candidate."
-            ),
-            GamePhase.ELECTION_VOTE: (
-                "All players are voting Ja or Nein on the proposed government."
-            ),
-            GamePhase.LEGISLATIVE_PRESIDENT: (
-                "The President is examining three policy tiles and must discard one."
-            ),
+            GamePhase.CHANCELLOR_NOMINATION: ("The President is nominating a Chancellor candidate."),
+            GamePhase.ELECTION_VOTE: ("All players are voting Ja or Nein on the proposed government."),
+            GamePhase.LEGISLATIVE_PRESIDENT: ("The President is examining three policy tiles and must discard one."),
             GamePhase.LEGISLATIVE_CHANCELLOR: (
                 "The Chancellor is choosing which of the two remaining policies to enact."
             ),
-            GamePhase.VETO_RESPONSE: (
-                "The Chancellor has proposed a veto. The President must consent or refuse."
-            ),
+            GamePhase.VETO_RESPONSE: ("The Chancellor has proposed a veto. The President must consent or refuse."),
             GamePhase.EXECUTIVE_ACTION_INVESTIGATE: (
                 "The President is investigating the party loyalty of another player."
             ),
-            GamePhase.EXECUTIVE_ACTION_PEEK: (
-                "The President is peeking at the top three policies in the draw pile."
-            ),
-            GamePhase.EXECUTIVE_ACTION_SPECIAL_ELECTION: (
-                "The President is choosing the next Presidential candidate."
-            ),
-            GamePhase.EXECUTIVE_ACTION_EXECUTION: (
-                "The President must execute a player."
-            ),
+            GamePhase.EXECUTIVE_ACTION_PEEK: ("The President is peeking at the top three policies in the draw pile."),
+            GamePhase.EXECUTIVE_ACTION_SPECIAL_ELECTION: ("The President is choosing the next Presidential candidate."),
+            GamePhase.EXECUTIVE_ACTION_EXECUTION: ("The President must execute a player."),
             GamePhase.GAME_OVER: "The game is over.",
         }[phase]
 
     def win_description(self, condition: WinCondition) -> str:
         return {
-            WinCondition.LIBERAL_POLICY_WIN: (
-                "The Liberals enacted 5 Liberal policies!"
-            ),
-            WinCondition.LIBERAL_HITLER_EXECUTED: (
-                "Hitler has been executed! The Liberals win!"
-            ),
-            WinCondition.FASCIST_POLICY_WIN: (
-                "6 Fascist policies have been enacted! The Fascists win!"
-            ),
+            WinCondition.LIBERAL_POLICY_WIN: ("The Liberals enacted 5 Liberal policies!"),
+            WinCondition.LIBERAL_HITLER_EXECUTED: ("Hitler has been executed! The Liberals win!"),
+            WinCondition.FASCIST_POLICY_WIN: ("6 Fascist policies have been enacted! The Fascists win!"),
             WinCondition.FASCIST_HITLER_CHANCELLOR: (
                 "Hitler was elected Chancellor after 3 Fascist policies! The Fascists win!"
             ),

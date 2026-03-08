@@ -5,31 +5,26 @@ from __future__ import annotations
 import json
 import random
 import subprocess
-import tempfile
 import uuid
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from orchestration.backends import (
+    ClaudeCodeSession,
+    OpenCodeSession,
+    create_session,
+    parse_model_spec,
+)
 from orchestration.claude_code_launcher import (
     InvocationResult,
     PlayerSession,
     build_mcp_config,
     build_system_prompt,
 )
-from orchestration.backends import (
-    BasePlayerSession,
-    ClaudeCodeSession,
-    OpenCodeSession,
-    create_session,
-    parse_model_spec,
-)
 from orchestration.orchestrator import GameOrchestrator, RandomBot, load_config, print_game_status
 from server.app import app, get_sessions
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -251,12 +246,17 @@ def _fake_run(
     *calls* — if provided, each invocation's cmd is appended.
     *stdout*/*stderr*/*returncode* — values for the CompletedProcess.
     """
+
     def mock_run(cmd, *, env=None, timeout=120):
         if calls is not None:
             calls.append(list(cmd))
         return subprocess.CompletedProcess(
-            args=cmd, returncode=returncode, stdout=stdout, stderr=stderr,
+            args=cmd,
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
         ), False
+
     return mock_run
 
 
@@ -268,9 +268,13 @@ class TestPlayerSession:
     def _make_session(tmp_path, monkeypatch, **overrides):
         monkeypatch.chdir(tmp_path)
         kwargs = dict(
-            game_id="test-game", player_id=0, token="tok",
-            server_url="http://localhost", skin="secret_hitler",
-            role="liberal", num_players=5,
+            game_id="test-game",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         kwargs.update(overrides)
         session = PlayerSession(**kwargs)
@@ -279,8 +283,13 @@ class TestPlayerSession:
 
     def test_session_id_is_valid_uuid(self):
         session = PlayerSession(
-            game_id="test-game", player_id=0, token="tok", server_url="http://localhost",
-            skin="secret_hitler", role="liberal", num_players=5,
+            game_id="test-game",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         # Should not raise
         uuid.UUID(session.session_id)
@@ -288,9 +297,13 @@ class TestPlayerSession:
     def test_setup_creates_config_files(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         session = PlayerSession(
-            game_id="test-game", player_id=2, token="tok-abc",
-            server_url="http://localhost:8000", skin="secret_hitler",
-            role="fascist", num_players=7,
+            game_id="test-game",
+            player_id=2,
+            token="tok-abc",
+            server_url="http://localhost:8000",
+            skin="secret_hitler",
+            role="fascist",
+            num_players=7,
         )
         session.setup()
 
@@ -305,9 +318,13 @@ class TestPlayerSession:
     def test_setup_creates_scratchpad_files(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         session = PlayerSession(
-            game_id="test-game", player_id=0, token="tok",
-            server_url="http://localhost:8000", skin="secret_hitler",
-            role="liberal", num_players=5,
+            game_id="test-game",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost:8000",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         session.setup()
         notes_dir = tmp_path / "logs" / "games" / "test-game" / "notes"
@@ -317,9 +334,13 @@ class TestPlayerSession:
     def test_system_prompt_includes_scratchpad_paths(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         session = PlayerSession(
-            game_id="test-game", player_id=0, token="tok",
-            server_url="http://localhost:8000", skin="secret_hitler",
-            role="liberal", num_players=5,
+            game_id="test-game",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost:8000",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         session.setup()
         assert "TODO list" in session._system_prompt
@@ -328,8 +349,13 @@ class TestPlayerSession:
 
     def test_invoke_turn_raises_without_setup(self):
         session = PlayerSession(
-            game_id="test-game", player_id=0, token="tok", server_url="http://localhost",
-            skin="secret_hitler", role="liberal", num_players=5,
+            game_id="test-game",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         with pytest.raises(RuntimeError, match="setup"):
             session.invoke_turn("do something")
@@ -365,11 +391,14 @@ class TestPlayerSession:
         session = self._make_session(tmp_path, monkeypatch)
 
         call_count = [0]
+
         def counting_run(cmd, *, env=None, timeout=120):
             call_count[0] += 1
             return subprocess.CompletedProcess(
-                args=cmd, returncode=0,
-                stdout=f"turn-{call_count[0]}\n", stderr=f"err-{call_count[0]}\n",
+                args=cmd,
+                returncode=0,
+                stdout=f"turn-{call_count[0]}\n",
+                stderr=f"err-{call_count[0]}\n",
             ), False
 
         monkeypatch.setattr("orchestration.backends._run_with_timeout", counting_run)
@@ -383,8 +412,11 @@ class TestPlayerSession:
 
     def test_invocation_result_fields(self):
         r = InvocationResult(
-            session_id="abc", stdout="out", stderr="err",
-            returncode=0, timed_out=False,
+            session_id="abc",
+            stdout="out",
+            stderr="err",
+            returncode=0,
+            timed_out=False,
         )
         assert r.session_id == "abc"
         assert r.returncode == 0
@@ -500,16 +532,20 @@ class TestTurnDrivenPrompts:
 
     def test_discussion_prompt_includes_timeout(self):
         orch = GameOrchestrator(
-            server_url="http://testserver", num_players=5,
-            bot_mode=True, discussion_timeout=45,
+            server_url="http://testserver",
+            num_players=5,
+            bot_mode=True,
+            discussion_timeout=45,
         )
         prompt = orch._build_discussion_prompt({"round": 1}, None)
         assert "45 seconds" in prompt
 
     def test_turn_prompt_includes_timeout(self):
         orch = GameOrchestrator(
-            server_url="http://testserver", num_players=5,
-            bot_mode=True, action_timeout=120.0,
+            server_url="http://testserver",
+            num_players=5,
+            bot_mode=True,
+            action_timeout=120.0,
         )
         pa = {"phase": "NOMINATION", "legal_targets": [1, 2]}
         prompt = orch._build_turn_prompt({"round": 1}, pa, "NominateChancellor")
@@ -564,18 +600,28 @@ class TestCreateSession:
     def test_creates_claudecode_session(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda binary: "/usr/bin/claude" if binary == "claude" else None)
         session = create_session(
-            backend="claude_code", game_id="g1", player_id=0, token="tok",
-            server_url="http://localhost", skin="secret_hitler",
-            role="liberal", num_players=5,
+            backend="claude_code",
+            game_id="g1",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         assert isinstance(session, ClaudeCodeSession)
 
     def test_creates_opencode_session(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda binary: "/usr/bin/opencode" if binary == "opencode" else None)
         session = create_session(
-            backend="open_code", game_id="g1", player_id=0, token="tok",
-            server_url="http://localhost", skin="secret_hitler",
-            role="liberal", num_players=5,
+            backend="open_code",
+            game_id="g1",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         assert isinstance(session, OpenCodeSession)
 
@@ -583,18 +629,28 @@ class TestCreateSession:
         monkeypatch.setattr("shutil.which", lambda binary: None)
         with pytest.raises(RuntimeError, match="not found on PATH"):
             create_session(
-                backend="claude_code", game_id="g1", player_id=0, token="tok",
-                server_url="http://localhost", skin="secret_hitler",
-                role="liberal", num_players=5,
+                backend="claude_code",
+                game_id="g1",
+                player_id=0,
+                token="tok",
+                server_url="http://localhost",
+                skin="secret_hitler",
+                role="liberal",
+                num_players=5,
             )
 
     def test_unknown_backend_raises_value_error(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda binary: "/usr/bin/x")
         with pytest.raises(ValueError, match="Unknown backend"):
             create_session(
-                backend="nonexistent", game_id="g1", player_id=0, token="tok",
-                server_url="http://localhost", skin="secret_hitler",
-                role="liberal", num_players=5,
+                backend="nonexistent",
+                game_id="g1",
+                player_id=0,
+                token="tok",
+                server_url="http://localhost",
+                skin="secret_hitler",
+                role="liberal",
+                num_players=5,
             )
 
 
@@ -605,15 +661,20 @@ class TestOpenCodeSession:
     def _make_session(self, tmp_path, monkeypatch) -> OpenCodeSession:
         monkeypatch.chdir(tmp_path)
         session = OpenCodeSession(
-            game_id="test-game", player_id=1, token="tok-xyz",
-            server_url="http://localhost:8000", skin="secret_hitler",
-            role="liberal", num_players=5, model="openai/gpt-4-turbo",
+            game_id="test-game",
+            player_id=1,
+            token="tok-xyz",
+            server_url="http://localhost:8000",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
+            model="openai/gpt-4-turbo",
         )
         session.setup()
         return session
 
     def test_config_json_structure(self, tmp_path, monkeypatch):
-        session = self._make_session(tmp_path, monkeypatch)
+        self._make_session(tmp_path, monkeypatch)
         config_dir = tmp_path / "logs" / "games" / "test-game" / "configs"
         config_path = config_dir / "player_1_opencode.json"
         assert config_path.exists()
@@ -661,10 +722,16 @@ class TestOpenCodeSession:
             calls.append(list(cmd))
             if "export" in cmd:
                 return subprocess.CompletedProcess(
-                    args=cmd, returncode=0, stdout="{}", stderr="",
+                    args=cmd,
+                    returncode=0,
+                    stdout="{}",
+                    stderr="",
                 ), False
             return subprocess.CompletedProcess(
-                args=cmd, returncode=0, stdout=session_stdout, stderr="",
+                args=cmd,
+                returncode=0,
+                stdout=session_stdout,
+                stderr="",
             ), False
 
         monkeypatch.setattr("orchestration.backends._run_with_timeout", mock_run)
@@ -687,11 +754,15 @@ class TestOpenCodeSession:
         session = self._make_session(tmp_path, monkeypatch)
 
         captured_env = {}
+
         def env_capturing_run(cmd, *, env=None, timeout=120):
             if env:
                 captured_env.update(env)
             return subprocess.CompletedProcess(
-                args=cmd, returncode=0, stdout="{}", stderr="",
+                args=cmd,
+                returncode=0,
+                stdout="{}",
+                stderr="",
             ), False
 
         monkeypatch.setattr("orchestration.backends._run_with_timeout", env_capturing_run)
@@ -724,14 +795,19 @@ class TestOpenCodeSession:
         session = self._make_session(tmp_path, monkeypatch)
 
         call_count = [0]
+
         def counting_run(cmd, *, env=None, timeout=120):
             call_count[0] += 1
             if "export" in cmd:
                 return subprocess.CompletedProcess(
-                    args=cmd, returncode=1, stdout="", stderr="",
+                    args=cmd,
+                    returncode=1,
+                    stdout="",
+                    stderr="",
                 ), False
             return subprocess.CompletedProcess(
-                args=cmd, returncode=0,
+                args=cmd,
+                returncode=0,
                 stdout=f'{{"turn": {call_count[0]}}}\n',
                 stderr=f"log-{call_count[0]}\n",
             ), False
@@ -750,16 +826,19 @@ class TestOpenCodeSession:
         session = self._make_session(tmp_path, monkeypatch)
 
         calls = []
+
         def export_aware_run(cmd, *, env=None, timeout=120):
             calls.append(list(cmd))
             if "export" in cmd:
                 return subprocess.CompletedProcess(
-                    args=cmd, returncode=0,
+                    args=cmd,
+                    returncode=0,
                     stdout='{"messages": [{"role": "user", "content": "hi"}]}',
                     stderr="",
                 ), False
             return subprocess.CompletedProcess(
-                args=cmd, returncode=0,
+                args=cmd,
+                returncode=0,
                 stdout='{"type":"step_start","sessionID":"ses_oc789","part":{}}\n',
                 stderr="",
             ), False
@@ -777,7 +856,7 @@ class TestOpenCodeSession:
         assert "messages" in transcript
 
     def test_scratchpad_files_created(self, tmp_path, monkeypatch):
-        session = self._make_session(tmp_path, monkeypatch)
+        self._make_session(tmp_path, monkeypatch)
         notes_dir = tmp_path / "logs" / "games" / "test-game" / "notes"
         todo = notes_dir / "player_1_todo.md"
         scratchpad = notes_dir / "player_1_scratchpad.md"
@@ -788,9 +867,13 @@ class TestOpenCodeSession:
 
     def test_invoke_raises_without_setup(self):
         session = OpenCodeSession(
-            game_id="g1", player_id=0, token="tok",
-            server_url="http://localhost", skin="secret_hitler",
-            role="liberal", num_players=5,
+            game_id="g1",
+            player_id=0,
+            token="tok",
+            server_url="http://localhost",
+            skin="secret_hitler",
+            role="liberal",
+            num_players=5,
         )
         with pytest.raises(RuntimeError, match="setup"):
             session.invoke_turn("do something")
@@ -812,6 +895,7 @@ class TestConfigLoading:
         }
         config_path = tmp_path / "game.yaml"
         import yaml
+
         config_path.write_text(yaml.dump(config), encoding="utf-8")
 
         loaded = load_config(config_path)
@@ -832,6 +916,7 @@ class TestConfigLoading:
         }
         config_path = tmp_path / "game.yaml"
         import yaml
+
         config_path.write_text(yaml.dump(config), encoding="utf-8")
 
         loaded = load_config(config_path)
@@ -848,6 +933,7 @@ class TestConfigLoading:
         }
         config_path = tmp_path / "game.yaml"
         import yaml
+
         config_path.write_text(yaml.dump(config), encoding="utf-8")
 
         loaded = load_config(config_path)
@@ -886,12 +972,23 @@ class TestStatusDashboard:
 
         # Write some events
         events = [
-            {"type": "action", "player_id": 0, "result": {"event": "policy_enacted", "policy": "liberal"}, "timestamp": "T1"},
-            {"type": "action", "player_id": 1, "result": {"event": "election_result", "ja": 4, "nein": 1, "elected": True}, "timestamp": "T2"},
+            {
+                "type": "action",
+                "player_id": 0,
+                "result": {"event": "policy_enacted", "policy": "liberal"},
+                "timestamp": "T1",
+            },
+            {
+                "type": "action",
+                "player_id": 1,
+                "result": {"event": "election_result", "ja": 4, "nein": 1, "elected": True},
+                "timestamp": "T2",
+            },
             {"type": "discussion", "player_id": 2, "message": "hi", "timestamp": "T3"},
         ]
         (game_dir / "events.jsonl").write_text(
-            "\n".join(json.dumps(e) for e in events), encoding="utf-8",
+            "\n".join(json.dumps(e) for e in events),
+            encoding="utf-8",
         )
 
         orch = GameOrchestrator(bot_mode=True)
@@ -915,22 +1012,39 @@ class TestStatusDashboard:
         game_dir.mkdir(parents=True)
 
         events = [
-            {"type": "action", "player_id": 0, "action_type": "nominate",
-             "result": {"event": "chancellor_nominated", "nominee": 1},
-             "timestamp": "2026-03-03T10:00:00+00:00"},
-            {"type": "discussion", "player_id": 0, "window": "pre_vote",
-             "message": "Let's pass this government.",
-             "timestamp": "2026-03-03T10:01:00+00:00"},
-            {"type": "action", "player_id": 0, "action_type": "vote",
-             "result": {"event": "election_result", "ja": 4, "nein": 1, "elected": True},
-             "timestamp": "2026-03-03T10:02:00+00:00"},
-            {"type": "action", "player_id": 1, "action_type": "chancellor_enact",
-             "result": {"event": "policy_enacted", "policy": "liberal"},
-             "timestamp": "2026-03-03T10:03:00+00:00"},
+            {
+                "type": "action",
+                "player_id": 0,
+                "action_type": "nominate",
+                "result": {"event": "chancellor_nominated", "nominee": 1},
+                "timestamp": "2026-03-03T10:00:00+00:00",
+            },
+            {
+                "type": "discussion",
+                "player_id": 0,
+                "window": "pre_vote",
+                "message": "Let's pass this government.",
+                "timestamp": "2026-03-03T10:01:00+00:00",
+            },
+            {
+                "type": "action",
+                "player_id": 0,
+                "action_type": "vote",
+                "result": {"event": "election_result", "ja": 4, "nein": 1, "elected": True},
+                "timestamp": "2026-03-03T10:02:00+00:00",
+            },
+            {
+                "type": "action",
+                "player_id": 1,
+                "action_type": "chancellor_enact",
+                "result": {"event": "policy_enacted", "policy": "liberal"},
+                "timestamp": "2026-03-03T10:03:00+00:00",
+            },
         ]
         events_path = game_dir / "events.jsonl"
         events_path.write_text(
-            "\n".join(json.dumps(e) for e in events), encoding="utf-8",
+            "\n".join(json.dumps(e) for e in events),
+            encoding="utf-8",
         )
 
         print_game_status("test-dash")

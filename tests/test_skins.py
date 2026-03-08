@@ -18,7 +18,6 @@ from game.types import (
     WinCondition,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
@@ -181,6 +180,7 @@ class TestTranslateObservation:
         pres_obs, engine, president, chancellor = _get_observation_at_legislation()
         engine.submit_action(PresidentDiscard(player_id=president, discard_index=0))
         from game.types import ChancellorEnact
+
         engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=0))
         # Now there should be history with a policy_enacted
         obs = engine.get_observation(0)

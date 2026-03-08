@@ -9,7 +9,6 @@ from game.types import (
     CastVote,
     ChancellorEnact,
     ExecutePlayer,
-    ExecutivePower,
     GamePhase,
     IllegalActionError,
     InvestigatePlayer,
@@ -20,7 +19,6 @@ from game.types import (
     SpecialElection,
     VetoResponse,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -47,16 +45,12 @@ def _handle_executive_action(engine: GameEngine, president: int) -> None:
 
         if phase == GamePhase.EXECUTIVE_ACTION_INVESTIGATE:
             target = pending.legal_targets[0]
-            engine.submit_action(
-                InvestigatePlayer(player_id=president, target_id=target)
-            )
+            engine.submit_action(InvestigatePlayer(player_id=president, target_id=target))
         elif phase == GamePhase.EXECUTIVE_ACTION_PEEK:
             engine.submit_action(PolicyPeekAck(player_id=president))
         elif phase == GamePhase.EXECUTIVE_ACTION_SPECIAL_ELECTION:
             target = pending.legal_targets[0]
-            engine.submit_action(
-                SpecialElection(player_id=president, target_id=target)
-            )
+            engine.submit_action(SpecialElection(player_id=president, target_id=target))
         elif phase == GamePhase.EXECUTIVE_ACTION_EXECUTION:
             # Pick a non-Hitler target to avoid ending the game.
             # Try each legal target; pick one whose role is NOT hitler.
@@ -68,14 +62,13 @@ def _handle_executive_action(engine: GameEngine, president: int) -> None:
             if target is None:
                 # All targets are Hitler (impossible in practice), just pick first.
                 target = pending.legal_targets[0]
-            engine.submit_action(
-                ExecutePlayer(player_id=president, target_id=target)
-            )
+            engine.submit_action(ExecutePlayer(player_id=president, target_id=target))
 
 
 def advance_round(
     engine: GameEngine,
     chancellor_target: int | None = None,
+    *,
     all_vote_ja: bool = True,
     president_discard_index: int = 0,
     chancellor_enact_index: int = 0,
@@ -95,9 +88,7 @@ def advance_round(
 
     if chancellor_target is None:
         chancellor_target = pending.legal_targets[0]
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor_target)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor_target))
 
     # --- Voting ---
     for pid in engine.living_players:
@@ -112,18 +103,12 @@ def advance_round(
 
     # --- Legislative session ---
     if engine.phase == GamePhase.LEGISLATIVE_PRESIDENT:
-        engine.submit_action(
-            PresidentDiscard(player_id=president, discard_index=president_discard_index)
-        )
+        engine.submit_action(PresidentDiscard(player_id=president, discard_index=president_discard_index))
 
         if engine.is_game_over:
             return None
 
-        result = engine.submit_action(
-            ChancellorEnact(
-                player_id=chancellor_target, enact_index=chancellor_enact_index
-            )
-        )
+        result = engine.submit_action(ChancellorEnact(player_id=chancellor_target, enact_index=chancellor_enact_index))
 
         if engine.is_game_over:
             return result
@@ -136,9 +121,7 @@ def advance_round(
     return None
 
 
-def _setup_engine_with_veto_unlocked(
-    num_players: int = 7, seed: int = 42
-) -> GameEngine:
+def _setup_engine_with_veto_unlocked(num_players: int = 7, seed: int = 42) -> GameEngine:
     """Create and set up an engine, then directly set the state so that
     5 fascist policies are enacted and veto is unlocked.
 
@@ -167,18 +150,14 @@ def _drive_to_chancellor_phase(engine: GameEngine) -> tuple[int, int]:
     president = pending.required_by
     chancellor = pending.legal_targets[0]
 
-    engine.submit_action(
-        NominateChancellor(player_id=president, target_id=chancellor)
-    )
+    engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor))
 
     for pid in engine.living_players:
         engine.submit_action(CastVote(player_id=pid, vote=True))
 
     assert engine.phase == GamePhase.LEGISLATIVE_PRESIDENT
 
-    engine.submit_action(
-        PresidentDiscard(player_id=president, discard_index=0)
-    )
+    engine.submit_action(PresidentDiscard(player_id=president, discard_index=0))
 
     assert engine.phase == GamePhase.LEGISLATIVE_CHANCELLOR
     return president, chancellor
@@ -214,10 +193,7 @@ def _find_seed_for_fascist_heavy_deck(
                 return seed
         except Exception:
             continue
-    raise RuntimeError(
-        f"Could not find a seed with {rounds_needed}+ fascist policies "
-        f"among first {max_seeds} seeds."
-    )
+    raise RuntimeError(f"Could not find a seed with {rounds_needed}+ fascist policies among first {max_seeds} seeds.")
 
 
 # ---------------------------------------------------------------------------
@@ -241,9 +217,7 @@ class TestVetoNotAvailableBefore5Fascist:
         president, chancellor = _drive_to_chancellor_phase(engine)
 
         with pytest.raises(IllegalActionError, match="Veto power has not been unlocked"):
-            engine.submit_action(
-                ChancellorEnact(player_id=chancellor, enact_index=None)
-            )
+            engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
     def test_pending_action_does_not_include_none_before_veto(self):
         """The legal_targets for LEGISLATIVE_CHANCELLOR should not include
@@ -271,9 +245,7 @@ class TestChancellorCanRequestVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        result = engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
+        result = engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
         assert result["event"] == "veto_requested"
         assert engine.phase == GamePhase.VETO_RESPONSE
@@ -294,9 +266,7 @@ class TestChancellorCanRequestVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
         pending = engine.pending_action
         assert pending.phase == GamePhase.VETO_RESPONSE
@@ -318,13 +288,9 @@ class TestPresidentConsentsVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
-        result = engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        result = engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         assert result["event"] == "veto_accepted"
 
@@ -337,12 +303,8 @@ class TestPresidentConsentsVeto:
         lib_before = engine.liberal_policy_count
         fas_before = engine.fascist_policy_count
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         assert engine.liberal_policy_count == lib_before
         assert engine.fascist_policy_count == fas_before
@@ -353,12 +315,8 @@ class TestPresidentConsentsVeto:
 
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         assert engine.election_tracker == tracker_before + 1
 
@@ -368,12 +326,8 @@ class TestPresidentConsentsVeto:
         president, chancellor = _drive_to_chancellor_phase(engine)
         round_during = engine._round_number
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         # Should now be in CHANCELLOR_NOMINATION for the next round.
         assert engine.phase == GamePhase.CHANCELLOR_NOMINATION
@@ -386,12 +340,8 @@ class TestPresidentConsentsVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         # The vetoed round should be the last one in history.
         last_round = engine.round_history[-1]
@@ -413,13 +363,9 @@ class TestPresidentRefusesVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
-        result = engine.submit_action(
-            VetoResponse(player_id=president, consent=False)
-        )
+        result = engine.submit_action(VetoResponse(player_id=president, consent=False))
 
         assert result["event"] == "veto_refused"
 
@@ -427,12 +373,8 @@ class TestPresidentRefusesVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=False)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=False))
 
         assert engine.phase == GamePhase.LEGISLATIVE_CHANCELLOR
 
@@ -442,29 +384,19 @@ class TestPresidentRefusesVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=False)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=False))
 
         with pytest.raises(IllegalActionError, match="already refused"):
-            engine.submit_action(
-                ChancellorEnact(player_id=chancellor, enact_index=None)
-            )
+            engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
     def test_pending_action_excludes_none_after_refusal(self):
         """After veto refusal, the legal_targets should not include None."""
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=False)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=False))
 
         pending = engine.pending_action
         assert pending.phase == GamePhase.LEGISLATIVE_CHANCELLOR
@@ -475,17 +407,11 @@ class TestPresidentRefusesVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=False)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=False))
 
         # Chancellor should be able to enact index 0 or 1.
-        result = engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=0)
-        )
+        result = engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=0))
         assert result["event"] == "policy_enacted"
 
     def test_round_record_reflects_refused_veto(self):
@@ -494,17 +420,11 @@ class TestPresidentRefusesVeto:
         engine = _setup_engine_with_veto_unlocked()
         president, chancellor = _drive_to_chancellor_phase(engine)
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=False)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=False))
 
         # Enact after refusal.
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=0)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=0))
 
         last_round = engine.round_history[-1]
         assert last_round.veto_attempted is True
@@ -526,12 +446,8 @@ class TestVetoAdvancesElectionTracker:
         assert engine.election_tracker == 0
 
         president, chancellor = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         assert engine.election_tracker == 1
 
@@ -544,9 +460,7 @@ class TestVetoAdvancesElectionTracker:
         pending = engine.pending_action
         president = pending.required_by
         chancellor = pending.legal_targets[0]
-        engine.submit_action(
-            NominateChancellor(player_id=president, target_id=chancellor)
-        )
+        engine.submit_action(NominateChancellor(player_id=president, target_id=chancellor))
         for pid in engine.living_players:
             engine.submit_action(CastVote(player_id=pid, vote=False))
 
@@ -554,12 +468,8 @@ class TestVetoAdvancesElectionTracker:
 
         # Now do a successful election followed by a veto.
         president2, chancellor2 = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor2, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president2, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor2, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president2, consent=True))
 
         # Successful election resets tracker to 0, then veto adds 1.
         assert engine.election_tracker == 1
@@ -570,12 +480,8 @@ class TestVetoAdvancesElectionTracker:
         tracker_before = engine.election_tracker
 
         president, chancellor = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=False)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=False))
 
         # Tracker unchanged since veto was refused.
         assert engine.election_tracker == tracker_before
@@ -614,15 +520,11 @@ class TestVetoCanTriggerChaos:
         # Manually set it to 2 to simulate accumulated failures.
         engine._election_tracker = 2
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
         policies_before = engine.liberal_policy_count + engine.fascist_policy_count
 
-        result = engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        result = engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         # Chaos should have fired.
         assert "chaos" in result
@@ -640,17 +542,11 @@ class TestVetoCanTriggerChaos:
         president, chancellor = _drive_to_chancellor_phase(engine)
         engine._election_tracker = 2
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         # Find the round record with chaos.
-        chaos_rounds = [
-            r for r in engine.round_history if r.chaos_policy is not None
-        ]
+        chaos_rounds = [r for r in engine.round_history if r.chaos_policy is not None]
         assert len(chaos_rounds) == 1
         assert chaos_rounds[0].chaos_policy in (
             PolicyType.LIBERAL,
@@ -665,12 +561,8 @@ class TestVetoCanTriggerChaos:
         president, chancellor = _drive_to_chancellor_phase(engine)
         engine._election_tracker = 2
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         assert engine.last_elected_president is None
         assert engine.last_elected_chancellor is None
@@ -683,13 +575,9 @@ class TestVetoCanTriggerChaos:
         president, chancellor = _drive_to_chancellor_phase(engine)
         engine._election_tracker = 1
 
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
 
-        result = engine.submit_action(
-            VetoResponse(player_id=president, consent=True)
-        )
+        result = engine.submit_action(VetoResponse(player_id=president, consent=True))
 
         assert "chaos" not in result
         assert engine.election_tracker == 2
@@ -719,23 +607,15 @@ class TestMultipleVetosInSequence:
 
         # First veto round.
         president1, chancellor1 = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor1, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president1, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor1, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president1, consent=True))
         assert engine.election_tracker == 1
 
         # Second veto round: the successful election resets tracker to 0,
         # then veto brings it back to 1.
         president2, chancellor2 = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor2, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president2, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor2, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president2, consent=True))
         # Tracker is 1 again (not 2), because the election reset it.
         assert engine.election_tracker == 1
 
@@ -747,12 +627,8 @@ class TestMultipleVetosInSequence:
 
         # Veto round: tracker -> 1.
         president1, chancellor1 = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor1, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president1, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor1, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president1, consent=True))
         assert engine.election_tracker == 1
 
         # Normal enact round: successful election resets tracker to 0.
@@ -767,15 +643,9 @@ class TestMultipleVetosInSequence:
 
         # Round 1: veto refused, chancellor enacts.
         president1, chancellor1 = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor1, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president1, consent=False)
-        )
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor1, enact_index=0)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor1, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president1, consent=False))
+        engine.submit_action(ChancellorEnact(player_id=chancellor1, enact_index=0))
 
         if engine.is_game_over:
             pytest.skip("Game ended after enactment; cannot continue test.")
@@ -786,12 +656,8 @@ class TestMultipleVetosInSequence:
 
         # Round 2: veto accepted.
         president2, chancellor2 = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor2, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president2, consent=True)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor2, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president2, consent=True))
         assert engine.election_tracker == 1
 
     def test_veto_fresh_each_session(self):
@@ -802,15 +668,9 @@ class TestMultipleVetosInSequence:
 
         # Round 1: veto refused, chancellor enacts.
         president1, chancellor1 = _drive_to_chancellor_phase(engine)
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor1, enact_index=None)
-        )
-        engine.submit_action(
-            VetoResponse(player_id=president1, consent=False)
-        )
-        engine.submit_action(
-            ChancellorEnact(player_id=chancellor1, enact_index=0)
-        )
+        engine.submit_action(ChancellorEnact(player_id=chancellor1, enact_index=None))
+        engine.submit_action(VetoResponse(player_id=president1, consent=False))
+        engine.submit_action(ChancellorEnact(player_id=chancellor1, enact_index=0))
 
         if engine.is_game_over:
             pytest.skip("Game ended after enactment; cannot continue test.")
@@ -820,14 +680,11 @@ class TestMultipleVetosInSequence:
 
         pending = engine.pending_action
         assert None in pending.legal_targets, (
-            "Veto option should be available in a new session even if "
-            "it was refused in the previous session."
+            "Veto option should be available in a new session even if it was refused in the previous session."
         )
 
         # And we should be able to actually request it.
-        result = engine.submit_action(
-            ChancellorEnact(player_id=chancellor2, enact_index=None)
-        )
+        result = engine.submit_action(ChancellorEnact(player_id=chancellor2, enact_index=None))
         assert result["event"] == "veto_requested"
         assert engine.phase == GamePhase.VETO_RESPONSE
 
@@ -858,9 +715,7 @@ class TestVetoThroughGameplay:
                 break
             advance_round(engine)
 
-        assert engine.veto_unlocked is True, (
-            f"Expected veto to unlock. Fascist policies: {engine.fascist_policy_count}"
-        )
+        assert engine.veto_unlocked is True, f"Expected veto to unlock. Fascist policies: {engine.fascist_policy_count}"
         assert engine.fascist_policy_count >= 5
 
         if engine.is_game_over:
@@ -868,8 +723,6 @@ class TestVetoThroughGameplay:
 
         # Now exercise veto.
         president, chancellor = _drive_to_chancellor_phase(engine)
-        result = engine.submit_action(
-            ChancellorEnact(player_id=chancellor, enact_index=None)
-        )
+        result = engine.submit_action(ChancellorEnact(player_id=chancellor, enact_index=None))
         assert result["event"] == "veto_requested"
         assert engine.phase == GamePhase.VETO_RESPONSE

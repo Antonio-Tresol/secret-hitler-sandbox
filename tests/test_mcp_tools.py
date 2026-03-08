@@ -7,10 +7,8 @@ import tempfile
 
 import pytest
 
-from game.types import IllegalActionError
 from server.app import _handle_mcp_tool
 from server.game_session import GameSession
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
 
