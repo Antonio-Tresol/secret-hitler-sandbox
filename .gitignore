@@ -30,3 +30,9 @@ game_transcripts.zip
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Secrets
+.env
+
+# Local working notes
+notes/

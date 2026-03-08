@@ -1,7 +1,7 @@
 # Example game configuration for the Secret Hitler orchestrator.
 #
 # Usage:
-#   uv run python -m agents.orchestrator --config examples/game_config.yaml
+#   uv run python -m orchestration --config examples/game_config.yaml
 #
 # CLI arguments override config file values when both are provided.
 
@@ -22,6 +22,7 @@ model: claudecode:claude-sonnet-4-6
 #   - claudecode:claude-opus-4-6
 #   - opencode:openai/gpt-4-turbo
 #   - opencode:openrouter/meta-llama/llama-4-maverick
+#   - openrouter:google/gemini-2.0-flash
 #   - claudecode:claude-haiku-4-5-20251001
 
 # ── Timing ───────────────────────────────────────────────────────────────────

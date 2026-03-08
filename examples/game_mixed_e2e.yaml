@@ -12,3 +12,4 @@ models:
   - claudecode:claude-haiku-4-5-20251001
   - opencode:github-copilot/gemini-3-flash-preview
   - claudecode:claude-haiku-4-5-20251001
+#   - openrouter:google/gemini-2.0-flash

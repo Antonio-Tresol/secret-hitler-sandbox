@@ -41,10 +41,11 @@ The project has three layers:
    MCP (streamable-http). Agents connect to the MCP endpoint; humans or
    scripts can use REST.
 
-3. **Orchestrator** -- Launches CLI agent instances (Claude Code or
-   OpenCode) as players, invokes them turn by turn, and collects
-   transcripts. Each agent gets a system prompt with the game rules and
-   its secret role, plus an MCP config pointing at the server. The
+3. **Orchestrator** -- Launches agent instances as players, invokes them
+   turn by turn, and collects transcripts. Three backends are supported:
+   Claude Code CLI, OpenCode CLI, and OpenRouter (custom ReAct agent
+   core). Each agent gets a system prompt with the game rules and its
+   secret role, plus an MCP config pointing at the server. The
    orchestrator uses session resumption to preserve each agent's full
    conversation history across turns without burning context on idle
    polling.
@@ -110,8 +111,8 @@ Unit and integration tests (no API calls, no agent CLI needed):
 uv run pytest tests/ -v -k "not e2e"
 ```
 
-There are currently 336 tests covering the engine, server, MCP tools,
-orchestrator, session management, and prompt generation.
+There are currently 415+ tests covering the engine, server, MCP tools,
+orchestrator, agent core, session management, and prompt generation.
 
 The E2E test runs a real game with Claude Code agents and will consume
 API tokens:
@@ -134,7 +135,7 @@ uv run uvicorn server.app:app --host 127.0.0.1 --port 8000
 Random-action bots for testing the full pipeline:
 
 ```
-uv run python -m agents.orchestrator --bot-mode --players 5 --seed 42
+uv run python -m orchestration --bot-mode --players 5 --seed 42
 ```
 
 ### Single model
@@ -143,7 +144,7 @@ All players use the same model. Plain model names default to the Claude
 Code backend:
 
 ```
-uv run python -m agents.orchestrator --players 5 --seed 42 --model claude-sonnet-4-6
+uv run python -m orchestration --players 5 --seed 42 --model claude-sonnet-4-6
 ```
 
 ### Mixed models via config file
@@ -160,7 +161,7 @@ discussion_rounds: 1
 models:
   - claudecode:claude-haiku-4-5-20251001
   - opencode:github-copilot/gpt-5-mini
-  - claudecode:claude-haiku-4-5-20251001
+  - openrouter:google/gemini-2.0-flash
   - opencode:github-copilot/gemini-3-flash-preview
   - claudecode:claude-haiku-4-5-20251001
 ```
@@ -168,7 +169,7 @@ models:
 Run it with:
 
 ```
-uv run python -m agents.orchestrator --config examples/game_mixed_e2e.yaml
+uv run python -m orchestration --config examples/game_mixed_e2e.yaml
 ```
 
 CLI arguments override config file values when both are provided. See
@@ -199,6 +200,8 @@ Model specs use a `backend:model` prefix to select the agent CLI:
 - `opencode:openai/gpt-4-turbo` -- OpenCode CLI
 - `opencode:github-copilot/gpt-5-mini` -- OpenCode via GitHub Copilot
 - `opencode:openrouter/meta-llama/llama-4-maverick` -- OpenCode via OpenRouter
+- `openrouter:anthropic/claude-sonnet-4-6` -- Custom agent core via OpenRouter API
+- `openrouter:google/gemini-2.0-flash` -- Any model available on OpenRouter
 
 Plain model names without a prefix (e.g. `claude-sonnet-4-6`) default
 to `claudecode:` for backward compatibility.
@@ -280,11 +283,16 @@ server/
     auth.py             Token generation
     game_logger.py      JSONL logging
 
-agents/
+orchestration/
     orchestrator.py     Turn-driven game loop, parallel invocation
-    backends.py         Backend abstraction (ClaudeCode + OpenCode sessions)
-    claude_code_launcher.py   Backward-compat shim (imports from backends)
-    prompts/            Markdown templates (base rules + per-role)
+    backends.py         Backend abstraction (ClaudeCode, OpenCode, Agent sessions)
+    claude_code_launcher.py   Backward-compat shim
+
+prompts/                Markdown templates (base rules + per-role)
+
+# External dependency (installed via uv):
+# agents — https://github.com/Antonio-Tresol/agents
+#   Custom ReAct agent core with OpenRouter, MCP tools, middleware
 
 examples/
     game_config.yaml          Single-model config example
@@ -293,7 +301,7 @@ examples/
 docs/
     analysis-guide.md         Log format reference and analysis process
 
-tests/                  336 unit/integration tests + 1 E2E test
+tests/                  415+ unit/integration tests + 1 E2E test
 ```
 
 
