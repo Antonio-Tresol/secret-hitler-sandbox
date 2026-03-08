@@ -201,8 +201,8 @@ Model specs use a `backend:model` prefix to select the agent CLI:
 - `opencode:openai/gpt-4-turbo` -- OpenCode CLI
 - `opencode:github-copilot/gpt-5-mini` -- OpenCode via GitHub Copilot
 - `opencode:openrouter/meta-llama/llama-4-maverick` -- OpenCode via OpenRouter
-- `openrouter:anthropic/claude-sonnet-4-6` -- Custom agent core via OpenRouter API
-- `openrouter:google/gemini-2.0-flash` -- Any model available on OpenRouter
+- `openrouter:anthropic/claude-sonnet-4-6` -- [Agent](https://github.com/Antonio-Tresol/agents) via OpenRouter
+- `openrouter:google/gemini-2.0-flash` -- [Agent](https://github.com/Antonio-Tresol/agents) via OpenRouter
 
 Plain model names without a prefix (e.g. `claude-sonnet-4-6`) default
 to `claudecode:` for backward compatibility.
