@@ -18,7 +18,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from agents.orchestrator import GameOrchestrator
+from orchestration.orchestrator import GameOrchestrator
 
 pytestmark = pytest.mark.e2e
 

@@ -13,7 +13,9 @@ Backend selection uses an explicit prefix convention::
 from __future__ import annotations
 
 import abc
+import asyncio
 import json
+import logging
 import os
 import shutil
 import signal
@@ -22,9 +24,11 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from agents.types import DEFAULT_MAX_TOKENS, FALLBACK_CONTEXT_LENGTH, AgentConfig
+
 # ─── Shared utilities (moved from claude_code_launcher.py) ───────────────────
 
-_PROMPTS_DIR = Path(__file__).parent / "prompts"
+_PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 _ROLE_TEMPLATE_FILES = {
     "liberal": "liberal.md",
@@ -64,8 +68,8 @@ def build_mcp_config(game_id: str, server_url: str, token: str) -> dict:
             "secret-hitler": {
                 "type": "http",
                 "url": url,
-            }
-        }
+            },
+        },
     }
 
 
@@ -111,7 +115,7 @@ def build_system_prompt(
 # ─── Invocation result ───────────────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(frozen=True)
 class InvocationResult:
     """Result from a single CLI invocation."""
 
@@ -127,6 +131,7 @@ class InvocationResult:
 _BACKEND_PREFIXES = {
     "claudecode": "claude_code",
     "opencode": "open_code",
+    "openrouter": "openrouter",
 }
 
 
@@ -151,7 +156,7 @@ def parse_model_spec(spec: str) -> tuple[str, str]:
         if backend is None:
             valid = ", ".join(sorted(_BACKEND_PREFIXES))
             raise ValueError(
-                f"Unknown backend prefix {prefix!r}. Valid prefixes: {valid}"
+                f"Unknown backend prefix {prefix!r}. Valid prefixes: {valid}",
             )
         return backend, model
     # No prefix -> default to Claude Code
@@ -163,6 +168,7 @@ def parse_model_spec(spec: str) -> tuple[str, str]:
 _BACKEND_BINARIES = {
     "claude_code": "claude",
     "open_code": "opencode",
+    "openrouter": None,
 }
 
 
@@ -177,19 +183,34 @@ def create_session(
     num_players: int,
     game_premise: str | None = None,
     model: str = "claude-sonnet-4-6",
+    agent_config: AgentConfig | None = None,
 ) -> BasePlayerSession:
     """Factory: create the right session type for *backend*.
 
     Raises :class:`RuntimeError` if the required CLI binary is not on PATH.
     """
     binary = _BACKEND_BINARIES.get(backend)
-    if binary is None:
+    if binary is None and backend not in _BACKEND_BINARIES:
         raise ValueError(f"Unknown backend: {backend!r}")
 
-    if shutil.which(binary) is None:
+    # CLI-based backends need the binary on PATH
+    if binary is not None and shutil.which(binary) is None:
         raise RuntimeError(
-            f"{binary!r} CLI not found on PATH. "
-            f"Install it to use the {backend} backend."
+            f"{binary!r} CLI not found on PATH. Install it to use the {backend} backend.",
+        )
+
+    if backend == "openrouter":
+        return AgentSession(
+            agent_config=agent_config,
+            game_id=game_id,
+            player_id=player_id,
+            token=token,
+            server_url=server_url,
+            skin=skin,
+            role=role,
+            num_players=num_players,
+            game_premise=game_premise,
+            model=model,
         )
 
     cls = ClaudeCodeSession if backend == "claude_code" else OpenCodeSession
@@ -327,11 +348,11 @@ class BasePlayerSession(abc.ABC):
         self._scratchpad_path = notes_dir / f"player_{self.player_id}_scratchpad.md"
 
         self._todo_path.write_text(
-            "# Strategy TODO\n\n- [ ] \n", encoding="utf-8",
+            "# Strategy TODO\n\n- [ ] \n",
+            encoding="utf-8",
         )
         self._scratchpad_path.write_text(
-            "# Scratchpad\n\nUse this file to track suspicions, voting "
-            "patterns, claims, and any strategic notes.\n",
+            "# Scratchpad\n\nUse this file to track suspicions, voting patterns, claims, and any strategic notes.\n",
             encoding="utf-8",
         )
         return config_dir
@@ -340,8 +361,11 @@ class BasePlayerSession(abc.ABC):
         """Build and cache the system prompt, including scratchpad paths."""
         if self._system_prompt is None:
             base = build_system_prompt(
-                self._skin, self._role, self.player_id,
-                self._num_players, self._game_premise,
+                self._skin,
+                self._role,
+                self.player_id,
+                self._num_players,
+                self._game_premise,
             )
             notes_section = (
                 "\n\n---\n\n## Strategy Notes\n\n"
@@ -398,7 +422,8 @@ class ClaudeCodeSession(BasePlayerSession):
         mcp_config = build_mcp_config(self.game_id, self._server_url, self._token)
         self._mcp_config_path = config_dir / f"player_{self.player_id}_mcp.json"
         self._mcp_config_path.write_text(
-            json.dumps(mcp_config, indent=2), encoding="utf-8",
+            json.dumps(mcp_config, indent=2),
+            encoding="utf-8",
         )
 
         self._write_system_prompt_file(config_dir)
@@ -415,13 +440,18 @@ class ClaudeCodeSession(BasePlayerSession):
         cmd = [
             "claude",
             "--print",
-            "--output-format", "stream-json",
+            "--output-format",
+            "stream-json",
             "--verbose",
-            "--max-turns", str(max_turns),
-            "--model", self.model,
-            "--mcp-config", str(self._mcp_config_path.resolve()),
+            "--max-turns",
+            str(max_turns),
+            "--model",
+            self.model,
+            "--mcp-config",
+            str(self._mcp_config_path.resolve()),
             "--strict-mcp-config",
-            "--permission-mode", "bypassPermissions",
+            "--permission-mode",
+            "bypassPermissions",
         ]
 
         if self._initialized:
@@ -493,7 +523,7 @@ class OpenCodeSession(BasePlayerSession):
                 "secret-hitler": {
                     "type": "remote",
                     "url": mcp_url,
-                }
+                },
             },
             "instructions": [str(prompt_path.resolve())],
             "permission": {
@@ -514,7 +544,8 @@ class OpenCodeSession(BasePlayerSession):
 
         self._config_path = config_dir / f"player_{self.player_id}_opencode.json"
         self._config_path.write_text(
-            json.dumps(config, indent=2), encoding="utf-8",
+            json.dumps(config, indent=2),
+            encoding="utf-8",
         )
 
     def invoke_turn(
@@ -529,9 +560,13 @@ class OpenCodeSession(BasePlayerSession):
         # --dir keeps opencode from picking up ambient project configs
         player_dir = str(self._config_path.parent.resolve())
         cmd = [
-            self._binary, "run", turn_prompt,
-            "--format", "json",
-            "--dir", player_dir,
+            self._binary,
+            "run",
+            turn_prompt,
+            "--format",
+            "json",
+            "--dir",
+            player_dir,
         ]
 
         if self._opencode_session_id is not None:
@@ -576,7 +611,8 @@ class OpenCodeSession(BasePlayerSession):
         try:
             export, _ = _run_with_timeout(
                 [self._binary, "export", self._opencode_session_id],
-                env=env, timeout=30,
+                env=env,
+                timeout=30,
             )
             if export.returncode == 0 and export.stdout.strip():
                 # Full overwrite — each export contains the complete session
@@ -606,3 +642,171 @@ class OpenCodeSession(BasePlayerSession):
                 if sid:
                     return sid
         return None
+
+
+# ─── Agent-core session (OpenRouter) ─────────────────────────────────────────
+
+_agent_logger = logging.getLogger(__name__ + ".AgentSession")
+
+
+class AgentSession(BasePlayerSession):
+    """Player session powered by the custom agent-core scaffold.
+
+    Uses ``agents.core`` (OpenRouter model, MCP tools, local file tools,
+    transcript middleware, and context compaction) instead of a CLI binary.
+    The ``Agent`` instance persists across turns so conversation history is
+    maintained.
+
+    CLI usage::
+
+        --model openrouter:anthropic/claude-sonnet-4-6
+    """
+
+    def __init__(
+        self,
+        *,
+        agent_config: AgentConfig | None = None,
+        **kwargs: object,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._config = agent_config or AgentConfig()
+        self._agent: object | None = None  # agents.core.Agent (lazy import)
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def setup(self) -> None:
+        """Prepare log paths and system prompt (agent created lazily on first turn)."""
+        self._prepare_log_paths()
+        self._build_system_prompt()
+
+    def invoke_turn(
+        self,
+        turn_prompt: str,
+        max_turns: int = 10,
+        timeout: int = 120,
+    ) -> InvocationResult:
+        if self._system_prompt is None:
+            raise RuntimeError("Call setup() before invoke_turn()")
+
+        # Reuse the same event loop across turns so httpx connections stay valid
+        if self._loop is None or self._loop.is_closed():
+            self._loop = asyncio.new_event_loop()
+
+        return self._loop.run_until_complete(
+            self._invoke(turn_prompt, max_turns=max_turns, timeout=timeout),
+        )
+
+    async def _build_agent(self) -> object:
+        """Resolve config from model metadata and construct Agent."""
+        from agents.agent import Agent
+        from agents.middleware import Compactor, Transcript
+        from agents.providers import (
+            DiskStore,
+            LocalTools,
+            McpTools,
+            OpenRouter,
+            fetch_openrouter_model_info,
+        )
+
+        info = await fetch_openrouter_model_info(self.model)
+
+        # Resolve max_tokens
+        max_tokens = self._config.max_tokens
+        if max_tokens is None:
+            max_tokens = info.max_completion_tokens if info else DEFAULT_MAX_TOKENS
+            _agent_logger.info(
+                "Resolved max_tokens=%d for %s%s",
+                max_tokens,
+                self.model,
+                " (fallback)" if info is None else "",
+            )
+
+        # Resolve compaction threshold
+        threshold = self._config.compaction_threshold
+        if threshold is None:
+            ctx_len = info.context_length if info else FALLBACK_CONTEXT_LENGTH
+            threshold = int(ctx_len * self._config.compaction_ratio)
+            _agent_logger.info(
+                "Resolved compaction_threshold=%d for %s (context=%d, ratio=%.2f%s)",
+                threshold,
+                self.model,
+                ctx_len,
+                self._config.compaction_ratio,
+                ", fallback" if info is None else "",
+            )
+
+        mcp_url = _build_mcp_url(self._server_url, self._token, self.game_id)
+        store_dir = Path("logs") / "games" / self.game_id / "agent_store" / f"player_{self.player_id}"
+        store = DiskStore(store_dir)
+
+        return Agent(
+            model=OpenRouter(
+                model=self.model,
+                temperature=self._config.temperature,
+                max_retries=self._config.max_retries,
+                max_tokens=max_tokens,
+                api_timeout=self._config.api_timeout,
+            ),
+            tools=[
+                McpTools(url=mcp_url),
+                LocalTools(store=store, prefix=f"player_{self.player_id}"),
+            ],
+            middleware=[
+                Transcript(
+                    store=store,
+                    key=f"transcript_player_{self.player_id}.jsonl",
+                ),
+                Compactor(threshold_tokens=threshold),
+            ],
+            system_prompt=self._system_prompt,
+        )
+
+    async def _invoke(
+        self,
+        turn_prompt: str,
+        *,
+        max_turns: int,
+        timeout: int,
+    ) -> InvocationResult:
+        from agents.agent import Agent, RunResult
+
+        # Build components on first invocation
+        if self._agent is None:
+            self._agent = await self._build_agent()
+
+        agent: Agent = self._agent  # type: ignore[assignment]
+
+        stdout = ""
+        stderr = ""
+        returncode = 0
+        timed_out = False
+
+        try:
+            run_result: RunResult = await agent.run(
+                turn_prompt,
+                max_turns=max_turns,
+                timeout=float(timeout),
+            )
+            timed_out = run_result.timed_out
+            stdout = json.dumps(run_result.to_dict(), indent=2)
+            if run_result.error:
+                stderr = run_result.error
+                returncode = 1
+        except Exception as exc:
+            _agent_logger.exception("Agent invocation failed")
+            stderr = str(exc)
+            returncode = 2
+
+        # Append to output file for debugging
+        if self._output_path is not None:
+            with open(self._output_path, "a", encoding="utf-8") as f:
+                f.write(f"--- Turn ---\n{stdout}\n")
+                if stderr:
+                    f.write(f"STDERR: {stderr}\n")
+
+        return InvocationResult(
+            session_id=self.session_id,
+            stdout=stdout,
+            stderr=stderr,
+            returncode=returncode,
+            timed_out=timed_out,
+        )

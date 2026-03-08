@@ -14,20 +14,20 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from agents.claude_code_launcher import (
+from orchestration.claude_code_launcher import (
     InvocationResult,
     PlayerSession,
     build_mcp_config,
     build_system_prompt,
 )
-from agents.backends import (
+from orchestration.backends import (
     BasePlayerSession,
     ClaudeCodeSession,
     OpenCodeSession,
     create_session,
     parse_model_spec,
 )
-from agents.orchestrator import GameOrchestrator, RandomBot, load_config, print_game_status
+from orchestration.orchestrator import GameOrchestrator, RandomBot, load_config, print_game_status
 from server.app import app, get_sessions
 
 
@@ -338,7 +338,7 @@ class TestPlayerSession:
         session = self._make_session(tmp_path, monkeypatch)
 
         calls = []
-        monkeypatch.setattr("agents.backends._run_with_timeout", _fake_run(calls))
+        monkeypatch.setattr("orchestration.backends._run_with_timeout", _fake_run(calls))
         session.invoke_turn("test prompt")
 
         assert "--session-id" in calls[0]
@@ -350,7 +350,7 @@ class TestPlayerSession:
         session = self._make_session(tmp_path, monkeypatch)
 
         calls = []
-        monkeypatch.setattr("agents.backends._run_with_timeout", _fake_run(calls))
+        monkeypatch.setattr("orchestration.backends._run_with_timeout", _fake_run(calls))
 
         session.invoke_turn("first turn")
         session.invoke_turn("second turn")
@@ -372,7 +372,7 @@ class TestPlayerSession:
                 stdout=f"turn-{call_count[0]}\n", stderr=f"err-{call_count[0]}\n",
             ), False
 
-        monkeypatch.setattr("agents.backends._run_with_timeout", counting_run)
+        monkeypatch.setattr("orchestration.backends._run_with_timeout", counting_run)
 
         session.invoke_turn("turn 1")
         session.invoke_turn("turn 2")
@@ -639,7 +639,7 @@ class TestOpenCodeSession:
 
         calls = []
         monkeypatch.setattr(
-            "agents.backends._run_with_timeout",
+            "orchestration.backends._run_with_timeout",
             _fake_run(calls, stdout='{"result": "ok"}'),
         )
         session.invoke_turn("do something")
@@ -667,7 +667,7 @@ class TestOpenCodeSession:
                 args=cmd, returncode=0, stdout=session_stdout, stderr="",
             ), False
 
-        monkeypatch.setattr("agents.backends._run_with_timeout", mock_run)
+        monkeypatch.setattr("orchestration.backends._run_with_timeout", mock_run)
 
         session.invoke_turn("first turn")
         session.invoke_turn("second turn")
@@ -694,7 +694,7 @@ class TestOpenCodeSession:
                 args=cmd, returncode=0, stdout="{}", stderr="",
             ), False
 
-        monkeypatch.setattr("agents.backends._run_with_timeout", env_capturing_run)
+        monkeypatch.setattr("orchestration.backends._run_with_timeout", env_capturing_run)
         session.invoke_turn("do something")
 
         assert "OPENCODE_CONFIG" in captured_env
@@ -736,7 +736,7 @@ class TestOpenCodeSession:
                 stderr=f"log-{call_count[0]}\n",
             ), False
 
-        monkeypatch.setattr("agents.backends._run_with_timeout", counting_run)
+        monkeypatch.setattr("orchestration.backends._run_with_timeout", counting_run)
 
         session.invoke_turn("turn 1")
         session.invoke_turn("turn 2")
@@ -764,7 +764,7 @@ class TestOpenCodeSession:
                 stderr="",
             ), False
 
-        monkeypatch.setattr("agents.backends._run_with_timeout", export_aware_run)
+        monkeypatch.setattr("orchestration.backends._run_with_timeout", export_aware_run)
         session.invoke_turn("do something")
 
         # Should have called opencode export after the run

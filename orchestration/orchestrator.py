@@ -2,10 +2,10 @@
 
 Run with::
 
-    uv run python -m agents.orchestrator --bot-mode --players 5 --seed 42
-    uv run python -m agents.orchestrator --config examples/game_config.yaml
-    uv run python -m agents.orchestrator --status          # live game dashboard
-    uv run python -m agents.orchestrator --status GAME_ID  # specific game
+    uv run python -m orchestration --bot-mode --players 5 --seed 42
+    uv run python -m orchestration --config examples/game_config.yaml
+    uv run python -m orchestration --status          # live game dashboard
+    uv run python -m orchestration --status GAME_ID  # specific game
 """
 
 from __future__ import annotations
@@ -19,9 +19,10 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 
-from agents.backends import BasePlayerSession, create_session, parse_model_spec
-
+from orchestration.backends import BasePlayerSession, create_session, parse_model_spec
+from agents.types import AgentConfig
 
 # ─── Bot player (random-action, for testing) ────────────────────────────────
 
@@ -29,7 +30,14 @@ from agents.backends import BasePlayerSession, create_session, parse_model_spec
 class RandomBot:
     """A simple bot that picks random legal actions via the REST API."""
 
-    def __init__(self, game_id: str, player_id: int, token: str, base_url: str, rng: random.Random) -> None:
+    def __init__(
+        self,
+        game_id: str,
+        player_id: int,
+        token: str,
+        base_url: str,
+        rng: random.Random,
+    ) -> None:
         self.game_id = game_id
         self.player_id = player_id
         self.token = token
@@ -114,6 +122,7 @@ class RandomBot:
 
 # ─── Orchestrator ────────────────────────────────────────────────────────────
 _MAX_RETRIES = 3  # retries per turn if agent fails to submit action
+_MAX_SKIP_CYCLES = 5  # max consecutive skip-retry cycles for the same pending action
 
 
 class GameOrchestrator:
@@ -141,6 +150,7 @@ class GameOrchestrator:
         max_turns_action: int = 10,
         max_turns_discussion: int = 5,
         discussion_timeout: int = 60,
+        agent_config: AgentConfig | None = None,
     ) -> None:
         self.server_url = server_url.rstrip("/")
         self.num_players = num_players
@@ -155,6 +165,7 @@ class GameOrchestrator:
         self.max_turns_action = max_turns_action
         self.max_turns_discussion = max_turns_discussion
         self.discussion_timeout = discussion_timeout
+        self.agent_config = agent_config
 
         self.game_id: str | None = None
         self.tokens: dict[str, int] = {}
@@ -237,10 +248,13 @@ class GameOrchestrator:
                 num_players=self.num_players,
                 game_premise=premise,
                 model=model_name,
+                agent_config=self.agent_config,
             )
             session.setup()
             self._sessions[player_id] = session
-            print(f"  Player {player_id} ({role}) session ready  backend={backend}  model={model_name}")
+            print(
+                f"  Player {player_id} ({role}) session ready  backend={backend}  model={model_name}",
+            )
 
     # ── turn-driven game loop ────────────────────────────────────────────
 
@@ -252,7 +266,9 @@ class GameOrchestrator:
         context-rich prompt, and invokes only the relevant player(s).
         """
         retries = 0
+        skip_cycles = 0
         last_pa_hash: str | None = None
+        skipped_pa_hash: str | None = None  # tracks the PA that keeps failing
         discussion_run_for_round: int | None = None  # prevent re-running discussion as voters trickle in
 
         while True:
@@ -278,13 +294,33 @@ class GameOrchestrator:
             if pa_hash == last_pa_hash:
                 retries += 1
                 if retries >= _MAX_RETRIES:
-                    print(f"  WARNING: Action not submitted after {_MAX_RETRIES} retries, skipping turn")
+                    # Track how many times we've skipped for the same underlying PA
+                    if pa_hash == skipped_pa_hash:
+                        skip_cycles += 1
+                    else:
+                        skipped_pa_hash = pa_hash
+                        skip_cycles = 1
+
+                    if skip_cycles >= _MAX_SKIP_CYCLES:
+                        player_info = pa.get("required_by", "unknown")
+                        action_info = pa.get("expected_action", "unknown")
+                        raise RuntimeError(
+                            f"Player {player_info} failed to submit {action_info} "
+                            f"after {_MAX_SKIP_CYCLES * _MAX_RETRIES} total attempts. "
+                            f"Aborting game to prevent infinite loop.",
+                        )
+
+                    print(
+                        f"  WARNING: Action not submitted after {_MAX_RETRIES} retries, skipping turn",
+                    )
                     retries = 0
                     last_pa_hash = None
                     time.sleep(self.poll_interval)
                     continue
             else:
                 retries = 0
+                skipped_pa_hash = None
+                skip_cycles = 0
             last_pa_hash = pa_hash
 
             expected = pa["expected_action"]
@@ -324,7 +360,10 @@ class GameOrchestrator:
     # ── invocation helpers ───────────────────────────────────────────────
 
     def _invoke_single_player(
-        self, player_id: int, status: dict, pa: dict,
+        self,
+        player_id: int,
+        status: dict,
+        pa: dict,
     ) -> None:
         """Invoke one player to take their action."""
         session = self._sessions.get(player_id)
@@ -334,7 +373,9 @@ class GameOrchestrator:
 
         prompt = self._build_turn_prompt(status, pa, pa["expected_action"])
         result = session.invoke_turn(
-            prompt, self.max_turns_action, int(self.action_timeout),
+            prompt,
+            self.max_turns_action,
+            int(self.action_timeout),
         )
         if result.timed_out:
             print(f"    Player {player_id} timed out")
@@ -366,16 +407,26 @@ class GameOrchestrator:
                     print(f"    Player {pid} {label} error: {exc}")
 
     def _invoke_voters(
-        self, voter_ids: list[int], status: dict, pa: dict,
+        self,
+        voter_ids: list[int],
+        status: dict,
+        pa: dict,
     ) -> None:
         """Invoke all voters in parallel."""
         prompt = self._build_turn_prompt(status, pa, "CastVote")
         self._invoke_players_in_parallel(
-            voter_ids, prompt, self.max_turns_action, int(self.action_timeout), "vote",
+            voter_ids,
+            prompt,
+            self.max_turns_action,
+            int(self.action_timeout),
+            "vote",
         )
 
     def _run_discussion_phase(
-        self, client: httpx.Client, status: dict, alive_ids: list[int],
+        self,
+        client: httpx.Client,
+        status: dict,
+        alive_ids: list[int],
     ) -> None:
         """Run multiple discussion rounds so players can read and respond.
 
@@ -383,7 +434,9 @@ class GameOrchestrator:
         players see what others said in earlier rounds via get_discussion().
         """
         round_num = status.get("round", "?")
-        print(f"  [Round {round_num}] Discussion open ({self.discussion_rounds} rounds)...")
+        print(
+            f"  [Round {round_num}] Discussion open ({self.discussion_rounds} rounds)...",
+        )
 
         for disc_round in range(1, self.discussion_rounds + 1):
             disc = self._get_discussion(client)
@@ -391,14 +444,20 @@ class GameOrchestrator:
 
             print(f"    Discussion round {disc_round}/{self.discussion_rounds}")
             self._invoke_players_in_parallel(
-                alive_ids, prompt, self.max_turns_discussion, self.discussion_timeout, "discussion",
+                alive_ids,
+                prompt,
+                self.max_turns_discussion,
+                self.discussion_timeout,
+                "discussion",
             )
 
         self._close_discussion(client)
         print(f"  [Round {round_num}] Discussion closed.")
 
     def _try_run_discussion(
-        self, client: httpx.Client, status: dict,
+        self,
+        client: httpx.Client,
+        status: dict,
     ) -> bool:
         """If a discussion window is open, run it and return True."""
         if self.discussion_rounds <= 0:
@@ -414,7 +473,10 @@ class GameOrchestrator:
     # ── prompt builders ──────────────────────────────────────────────────
 
     def _build_turn_prompt(
-        self, status: dict, pa: dict, action_type: str,
+        self,
+        status: dict,
+        pa: dict,
+        action_type: str,
     ) -> str:
         """Build a context-rich prompt for a specific turn action."""
         round_num = status.get("round", "?")
@@ -430,73 +492,71 @@ class GameOrchestrator:
             parts.append(
                 f"You are President. Nominate a Chancellor from: {targets}\n"
                 "Call get_observation() to review the game state, think about "
-                "strategy, then submit_action('nominate', {\"target_id\": <id>})."
+                "strategy, then submit_action('nominate', {\"target_id\": <id>}).",
             )
         elif action_type == "CastVote":
             parts.append(
                 "Vote on the proposed government. Call get_observation() to "
                 "see the nominee, optionally get_discussion() for context, "
                 "then submit_action('vote', {\"vote\": true}) for Ja "
-                "or submit_action('vote', {\"vote\": false}) for Nein."
+                "or submit_action('vote', {\"vote\": false}) for Nein.",
             )
         elif action_type == "PresidentDiscard":
             parts.append(
                 "You are President. You drew 3 policy tiles. "
                 "Call get_observation() to see drawn_policies, then "
-                "submit_action('president_discard', {\"discard_index\": <0|1|2>})."
+                "submit_action('president_discard', {\"discard_index\": <0|1|2>}).",
             )
         elif action_type == "ChancellorEnact":
             veto_note = ""
             if targets and None in targets:
-                veto_note = (
-                    " Veto power is unlocked — you may propose a veto "
-                    "with enact_index=null."
-                )
+                veto_note = " Veto power is unlocked — you may propose a veto with enact_index=null."
             parts.append(
                 f"You are Chancellor. You received 2 policy tiles.{veto_note} "
                 "Call get_observation() to see received_policies, then "
-                "submit_action('chancellor_enact', {\"enact_index\": <0|1>})."
+                "submit_action('chancellor_enact', {\"enact_index\": <0|1>}).",
             )
         elif action_type == "VetoResponse":
             parts.append(
                 "The Chancellor proposed a veto. As President, consent (true) "
                 "or refuse (false). Call get_observation(), then "
-                "submit_action('veto_response', {\"consent\": true|false})."
+                "submit_action('veto_response', {\"consent\": true|false}).",
             )
         elif action_type == "InvestigatePlayer":
             parts.append(
                 f"You must investigate a player's loyalty. Targets: {targets}\n"
                 "Call get_observation(), then "
-                "submit_action('investigate', {\"target_id\": <id>})."
+                "submit_action('investigate', {\"target_id\": <id>}).",
             )
         elif action_type == "PolicyPeekAck":
             parts.append(
                 "You may peek at the top 3 policies. Call get_observation() "
                 "to see peeked_policies, then "
-                "submit_action('peek_ack', {}) to acknowledge."
+                "submit_action('peek_ack', {}) to acknowledge.",
             )
         elif action_type == "SpecialElection":
             parts.append(
                 f"You must call a Special Election. Targets: {targets}\n"
                 "Call get_observation(), then "
-                "submit_action('special_election', {\"target_id\": <id>})."
+                "submit_action('special_election', {\"target_id\": <id>}).",
             )
         elif action_type == "ExecutePlayer":
             parts.append(
                 f"You must execute a player. Targets: {targets}\n"
                 "Call get_observation(), then "
-                "submit_action('execute', {\"target_id\": <id>})."
+                "submit_action('execute', {\"target_id\": <id>}).",
             )
         else:
             parts.append(
-                f"Action required: {action_type}. "
-                "Call get_game_status() and get_observation() to decide."
+                f"Action required: {action_type}. Call get_game_status() and get_observation() to decide.",
             )
 
         return "\n".join(parts)
 
     def _build_discussion_prompt(
-        self, status: dict, discussion: dict | None,
+        self,
+        status: dict,
+        discussion: dict | None,
     ) -> str:
         """Build a prompt for the discussion phase."""
         round_num = status.get("round", "?")
@@ -506,17 +566,14 @@ class GameOrchestrator:
             "A discussion window is open before the vote. Share your "
             "thoughts, accuse other players, defend yourself, or strategize.",
             "",
-            "Call get_discussion() to read what others have said, "
-            "then speak('your message') to contribute.",
+            "Call get_discussion() to read what others have said, then speak('your message') to contribute.",
             "Call get_observation() if you need to review the game state.",
             "",
             "IMPORTANT: Do NOT call submit_action during discussion. "
             "Only use speak() and observation tools. Be concise and act quickly.",
         ]
         if discussion and discussion.get("messages"):
-            parts.append(
-                f"\n{len(discussion['messages'])} messages already posted."
-            )
+            parts.append(f"\n{len(discussion['messages'])} messages already posted.")
         return "\n".join(parts)
 
     # ── server helpers ───────────────────────────────────────────────────
@@ -544,7 +601,7 @@ class GameOrchestrator:
     def _close_discussion(self, client: httpx.Client) -> None:
         """Close the current discussion window."""
         resp = client.post(
-            f"{self.server_url}/api/games/{self.game_id}/close-discussion"
+            f"{self.server_url}/api/games/{self.game_id}/close-discussion",
         )
         resp.raise_for_status()
 
@@ -607,7 +664,8 @@ class GameOrchestrator:
             "last_timestamp": last_ts,
         }
         (log_dir / "status.json").write_text(
-            json.dumps(status, indent=2), encoding="utf-8",
+            json.dumps(status, indent=2),
+            encoding="utf-8",
         )
 
     def collect_results(self, client: httpx.Client) -> dict:
@@ -622,7 +680,9 @@ class GameOrchestrator:
         """Run the full orchestration flow: create, start, setup, loop, collect."""
         with httpx.Client(timeout=30.0) as client:
             lobby = self.create_lobby(client)
-            print(f"Lobby created: game_id={lobby['game_id']}, players={lobby['num_players']}")
+            print(
+                f"Lobby created: game_id={lobby['game_id']}, players={lobby['num_players']}",
+            )
             print(f"  Skin: {self.skin}, Seed: {self.seed}")
 
             self.start_game(client)
@@ -647,7 +707,7 @@ class GameOrchestrator:
             result = self.run_game_loop(client)
 
             self._write_status("game_over", f"{result['result']['winner']} wins")
-            print(f"\nGame over!")
+            print("\nGame over!")
             print(f"  Winner: {result['result']['winner']}")
             print(f"  Condition: {result['result']['condition']}")
             print(f"  Final round: {result['result']['final_round']}")
@@ -672,7 +732,9 @@ def load_config(path: str | Path) -> dict[str, Any]:
     with open(config_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if not isinstance(data, dict):
-        raise ValueError(f"Config file must be a YAML mapping, got {type(data).__name__}")
+        raise ValueError(
+            f"Config file must be a YAML mapping, got {type(data).__name__}",
+        )
     return data
 
 
@@ -693,7 +755,11 @@ def print_game_status(game_id: str | None = None) -> None:
         game_dir = games_dir / game_id
     else:
         # Most recently modified game directory
-        candidates = sorted(games_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+        candidates = sorted(
+            games_dir.iterdir(),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
         if not candidates:
             print("No games found in logs/games/")
             return
@@ -709,7 +775,9 @@ def print_game_status(game_id: str | None = None) -> None:
         print(f"Game:  {st['game_id']}")
         print(f"Phase: {st['phase']} — {st['detail']}")
         print(f"Board: {st['board']['liberal']}L / {st['board']['fascist']}F")
-        print(f"Elections: {st['elections']}  Actions: {st['actions']}  Discussion: {st['discussion_messages']} msgs")
+        print(
+            f"Elections: {st['elections']}  Actions: {st['actions']}  Discussion: {st['discussion_messages']} msgs",
+        )
         if st.get("last_timestamp"):
             print(f"Last activity: {st['last_timestamp']}")
         print()
@@ -743,7 +811,9 @@ def print_game_status(game_id: str | None = None) -> None:
     fas = sum(1 for p in policies if p == "fascist")
 
     print(f"=== Game {game_id} ===")
-    print(f"Events: {len(events)}  |  Actions: {len(actions)}  |  Discussion: {len(disc_msgs)} msgs")
+    print(
+        f"Events: {len(events)}  |  Actions: {len(actions)}  |  Discussion: {len(disc_msgs)} msgs",
+    )
     print()
 
     # Board
@@ -791,9 +861,11 @@ def print_game_status(game_id: str | None = None) -> None:
 
 
 def main() -> None:
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="Secret Hitler game orchestrator",
-        prog="python -m agents.orchestrator",
+        prog="python -m orchestration",
     )
     parser.add_argument(
         "--server-url",
@@ -861,6 +933,18 @@ def main() -> None:
         help="Max tool-use rounds per discussion invocation (default: 5)",
     )
     parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Temperature for OpenRouter models (default: 1.0)",
+    )
+    parser.add_argument(
+        "--compaction-ratio",
+        type=float,
+        default=None,
+        help="Compact context at this fraction of model's context window (default: 0.75)",
+    )
+    parser.add_argument(
         "--config",
         default=None,
         help="Path to a YAML game config file (CLI args override config values)",
@@ -894,6 +978,7 @@ def main() -> None:
         "models": None,
         "max_turns_action": 10,
         "max_turns_discussion": 5,
+        "agent": {},
     }
 
     # Layer 1: config file
@@ -927,11 +1012,19 @@ def main() -> None:
     if args.max_turns_discussion is not None:
         cfg["max_turns_discussion"] = args.max_turns_discussion
 
+    # Build agent config from YAML + CLI overrides
+    agent_dict = dict(cfg.get("agent", {}))
+    if args.temperature is not None:
+        agent_dict["temperature"] = args.temperature
+    if args.compaction_ratio is not None:
+        agent_dict["compaction_ratio"] = args.compaction_ratio
+    agent_cfg = AgentConfig(**agent_dict)
+
     # Validate models length
     models = cfg["models"]
     if models is not None and len(models) != cfg["players"]:
         parser.error(
-            f"--models has {len(models)} entries but --players is {cfg['players']}"
+            f"--models has {len(models)} entries but --players is {cfg['players']}",
         )
 
     orch = GameOrchestrator(
@@ -946,6 +1039,7 @@ def main() -> None:
         models=models,
         max_turns_action=cfg["max_turns_action"],
         max_turns_discussion=cfg["max_turns_discussion"],
+        agent_config=agent_cfg,
     )
     orch.run()
 
